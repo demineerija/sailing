@@ -89,14 +89,23 @@ export function midpoint(a: GeoCoord, b: GeoCoord): GeoCoord {
 /**
  * Compute which end of the start line is favored.
  *
+ * Convention: PIN is the port (left) end and COMMITTEE is the starboard (right)
+ * end when looking from the line toward the windward mark.
+ *
  * - lineBearing: bearing from PIN to COMMITTEE in degrees true.
  * - windDirection: TWD (where wind is from), degrees true.
  * - lineLength: line length in metres.
  *
- * bias = wrap180(TWD - (lineBearing - 90))
- *   bias > 0 → PIN favored
- *   bias < 0 → COMMITTEE favored
- *   |bias| < NEUTRAL_THRESHOLD_DEG → neutral
+ * Geometry: the upwind perpendicular to the line is `lineBearing - 90` (one
+ * quarter-turn left from the PIN→COMMITTEE direction). When the wind shifts
+ * clockwise relative to that perpendicular (TWD > perpendicular) the windward
+ * mark moves to the right, so the starboard (COMMITTEE) end ends up closer to
+ * the wind and is favored.
+ *
+ *   bias = wrap180(TWD - (lineBearing - 90))
+ *     bias > 0 → COMMITTEE favored (wind shifted right of line normal)
+ *     bias < 0 → PIN favored      (wind shifted left of line normal)
+ *     |bias| < NEUTRAL_THRESHOLD_DEG → neutral
  *
  * advantageMeters = lineLength * sin(|bias|)
  */
@@ -109,7 +118,7 @@ export function computeLineBias(
   const bias = wrap180(windDirection - normal);
   const abs = Math.abs(bias);
   const favored: FavoredEnd =
-    abs < NEUTRAL_THRESHOLD_DEG ? 'neutral' : bias > 0 ? 'pin' : 'committee';
+    abs < NEUTRAL_THRESHOLD_DEG ? 'neutral' : bias > 0 ? 'committee' : 'pin';
   const advantageMeters =
     Math.max(0, lineLength) * Math.abs(Math.sin(deg2rad(abs)));
   return { favored, degrees: bias, advantageMeters };

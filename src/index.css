@@ -25,6 +25,13 @@
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+  /* Honour the iOS dynamic viewport so the bottom Safari toolbar never
+     covers the action buttons. Falls back to 100vh on older browsers. */
+  .app-root {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+  }
 }
 
 @layer utilities {

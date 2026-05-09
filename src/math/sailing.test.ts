@@ -53,23 +53,23 @@ describe('haversine + bearings', () => {
 
 describe('computeLineBias', () => {
   // Line bearing PIN→COMMITTEE = 90° (line lies west→east).
-  // Normal upwind = 0° (north).
+  // Normal upwind = 0° (north).  PIN is on the left (west, port end),
+  // COMMITTEE is on the right (east, starboard end).
   const lineBearing = 90;
   const lineLength = 100;
 
-  it('PIN favored when wind shifts left of line normal (TWD < 360 / left)', () => {
-    // wind from 350 → bias = wrap180(350 - 0) = -10 → COMMITTEE? Need bias > 0 → PIN.
-    // Actually bias = wrap180(TWD - (lineBearing - 90)) = wrap180(350 - 0) = -10
-    // So 350 → COMMITTEE favored. For PIN favored, wind must be 10° (right of north).
+  it('COMMITTEE favored when wind shifts clockwise of line normal (toward starboard end)', () => {
+    // TWD=10° → wind comes a bit from the east-of-north → windward mark
+    // ends up north-east of the start, closer to the COMMITTEE (east) end.
     const bias = computeLineBias(lineBearing, 10, lineLength);
-    expect(bias.favored).toBe('pin');
+    expect(bias.favored).toBe('committee');
     expect(bias.degrees).toBeCloseTo(10, 5);
     expect(bias.advantageMeters).toBeCloseTo(lineLength * Math.sin((10 * Math.PI) / 180), 3);
   });
 
-  it('COMMITTEE favored when wind shifts the other way', () => {
+  it('PIN favored when wind shifts the other way (toward port end)', () => {
     const bias = computeLineBias(lineBearing, 350, lineLength);
-    expect(bias.favored).toBe('committee');
+    expect(bias.favored).toBe('pin');
     expect(bias.degrees).toBeCloseTo(-10, 5);
   });
 
@@ -79,17 +79,30 @@ describe('computeLineBias', () => {
     expect(Math.abs(bias.degrees)).toBeLessThan(NEUTRAL_THRESHOLD_DEG);
   });
 
-  it('wrap-around: TWD 355° vs 5° give consistent answers', () => {
-    // Picked above the neutral threshold so that favored sides are decisive.
+  it('wrap-around: TWD 355° vs 5° give consistent (mirrored) answers', () => {
     const a = computeLineBias(lineBearing, 355, lineLength);
     const b = computeLineBias(lineBearing, 5, lineLength);
-    expect(a.favored).toBe('committee');
-    expect(b.favored).toBe('pin');
+    expect(a.favored).toBe('pin');
+    expect(b.favored).toBe('committee');
     expect(Math.abs(a.degrees + b.degrees)).toBeLessThan(1e-9);
   });
 
+  it('matches the geometric truth: end closer to a windward mark = favored', () => {
+    // Physical sanity check: place a windward mark at the bearing implied by
+    // TWD and verify the favored end is actually the closer one.
+    const cases = [
+      { twd: 10, expected: 'committee' as const },
+      { twd: 350, expected: 'pin' as const },
+      { twd: 30, expected: 'committee' as const },
+      { twd: 330, expected: 'pin' as const }
+    ];
+    for (const { twd, expected } of cases) {
+      const bias = computeLineBias(lineBearing, twd, lineLength);
+      expect(bias.favored).toBe(expected);
+    }
+  });
+
   it('warns when wind nearly along line (|bias| > 80°)', () => {
-    // TWD = 85 → normal is 0 → bias = 85
     const bias = computeLineBias(lineBearing, 85, 100);
     const warnings = sanityWarnings(PIN, COMMITTEE, null, 85, bias);
     expect(warnings.some((w) => w.type === 'biasNearlyAlongLine')).toBe(true);

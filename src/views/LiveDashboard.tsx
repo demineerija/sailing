@@ -23,6 +23,7 @@ export function LiveDashboard() {
   const setViewMode = useSailingStore((s) => s.setViewMode);
   const setDrawer = useSailingStore((s) => s.setDrawer);
   const pingMark = useSailingStore((s) => s.pingMark);
+  const newRace = useSailingStore((s) => s.newRace);
   const holdMs = useSailingStore((s) => s.settings.holdMs);
 
   useEffect(() => {
@@ -59,11 +60,11 @@ export function LiveDashboard() {
   const hasLine = !!course.pin && !!course.committee;
 
   return (
-    <div className="h-full flex flex-col safe-top safe-bottom">
+    <div className="h-full flex flex-col safe-top safe-bottom min-h-0">
       {/* Top bar */}
-      <div className="flex items-center gap-2 p-2 bg-navyDeep border-b border-white/5">
+      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-navyDeep border-b border-white/5 shrink-0">
         <button
-          className="min-w-[56px] min-h-[56px] rounded-xl bg-white/10 text-2xl"
+          className="min-w-[44px] h-11 rounded-xl bg-white/10 text-xl"
           onClick={() => setDrawer('settings')}
           aria-label="меню"
         >
@@ -75,13 +76,13 @@ export function LiveDashboard() {
         <FreshChip emoji="🌬" pingedAt={course.windSetAt ?? null} />
         <div className="ml-auto flex bg-white/10 rounded-xl overflow-hidden">
           <button
-            className={`min-h-[44px] px-3 ${viewMode === 'schema' ? 'bg-windwardBlue' : ''}`}
+            className={`h-11 px-2.5 text-sm ${viewMode === 'schema' ? 'bg-windwardBlue' : ''}`}
             onClick={() => setViewMode('schema')}
           >
             Сх
           </button>
           <button
-            className={`min-h-[44px] px-3 ${viewMode === 'map' ? 'bg-windwardBlue' : ''}`}
+            className={`h-11 px-2.5 text-sm ${viewMode === 'map' ? 'bg-windwardBlue' : ''}`}
             onClick={() => setViewMode('map')}
           >
             Карт
@@ -89,13 +90,17 @@ export function LiveDashboard() {
         </div>
       </div>
 
-      {/* Verdict */}
-      <div className="px-4 pt-3">
-        {hasLine && calc?.bias ? <BiasVerdict bias={calc.bias} /> : <NoLineCta />}
+      {/* Verdict + skew compact strip */}
+      <div className="px-3 pt-2 shrink-0">
+        {hasLine && calc?.bias ? (
+          <BiasVerdict bias={calc.bias} skew={calc?.skew ?? null} />
+        ) : (
+          <NoLineCta />
+        )}
       </div>
 
-      {/* Canvas */}
-      <div className="flex-1 px-3 pt-2">
+      {/* Canvas (flex-shrinkable) */}
+      <div className="flex-1 min-h-[120px] px-2 pt-1.5">
         <div className="w-full h-full bg-navyDeep rounded-2xl overflow-hidden">
           {viewMode === 'schema' ? (
             <SchemaCanvas course={course} />
@@ -105,72 +110,51 @@ export function LiveDashboard() {
         </div>
       </div>
 
-      {/* Course skew */}
-      {calc?.skew ? (
-        <div className="px-4 py-2 text-center">
-          <span
-            className={`text-2xl font-extrabold ${
-              calc.skew.favored === 'starboard'
-                ? 'text-committeeGreen'
-                : calc.skew.favored === 'port'
-                ? 'text-pinRed'
-                : 'text-white/60'
-            }`}
-          >
-            {calc.skew.favored === 'starboard'
-              ? `ДИСТАНЦИЯ: ПРАВО +${Math.round(Math.abs(calc.skew.degrees))}°`
-              : calc.skew.favored === 'port'
-              ? `ДИСТАНЦИЯ: ЛЕВО +${Math.round(Math.abs(calc.skew.degrees))}°`
-              : 'ДИСТАНЦИЯ РОВНАЯ'}
-          </span>
-        </div>
-      ) : null}
-
-      {/* Warnings */}
+      {/* Warnings — only when present, single line on phones */}
       {calc?.warnings && calc.warnings.length > 0 ? (
-        <div className="px-4 pb-2 text-sm text-windYellow">
+        <div className="px-3 pt-1 text-xs text-windYellow truncate shrink-0">
           {calc.warnings.map((w, i) => (
-            <div key={i}>⚠ {warningText(w)}</div>
+            <div key={i} className="truncate">⚠ {warningText(w)}</div>
           ))}
         </div>
       ) : null}
 
-      {/* Bottom strip */}
-      <div className="grid grid-cols-3 gap-2 p-2">
+      {/* Bottom action strip — all main buttons in one shrink-0 area */}
+      <div className="grid grid-cols-3 gap-1.5 p-2 shrink-0">
         <TimerCompact />
         <button
           type="button"
-          className="min-h-[88px] rounded-2xl bg-navyDeep flex flex-col items-center justify-center active:opacity-80"
+          className="min-h-[64px] rounded-2xl bg-navyDeep flex flex-col items-center justify-center active:opacity-80"
           onClick={() => setDrawer('wind')}
         >
-          <div className="text-3xl font-black tabular-nums text-windYellow">
+          <div className="text-2xl font-black tabular-nums text-windYellow leading-none">
             {course.windDirection !== null ? `${Math.round(course.windDirection)}°` : '—'}
           </div>
-          <div className="text-xs text-white/60">ветер TWD</div>
+          <div className="text-[10px] text-white/60 mt-1">ветер TWD</div>
         </button>
         <button
           type="button"
-          className="min-h-[88px] rounded-2xl bg-navyDeep flex flex-col items-center justify-center active:opacity-80"
+          className="min-h-[64px] rounded-2xl bg-navyDeep flex flex-col items-center justify-center active:opacity-80"
           onClick={() => setDrawer('history')}
         >
-          <div className="text-2xl font-bold tabular-nums">
+          <div className="text-base font-bold tabular-nums leading-tight">
             {calc?.distLine !== null && calc?.distLine !== undefined ? `${Math.round(calc.distLine)}м` : '—'}
             {calc?.ttb !== null && calc?.ttb !== undefined ? ` · ${Math.round(calc.ttb)}с` : ''}
           </div>
-          <div className="text-xs text-white/60">до линии</div>
+          <div className="text-[10px] text-white/60 mt-0.5">до линии</div>
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 px-2 pb-2">
+      <div className="grid grid-cols-2 gap-1.5 px-2 pb-2 shrink-0">
         <button
-          className="min-h-[64px] rounded-2xl bg-white/10 text-lg font-bold"
+          className="min-h-[48px] rounded-2xl bg-white/10 text-base font-bold"
           onClick={() => setDrawer('setup')}
         >
           Постановка
         </button>
         <button
-          className="min-h-[64px] rounded-2xl bg-windwardBlue text-lg font-bold"
-          onClick={() => useSailingStore.getState().newRace()}
+          className="min-h-[48px] rounded-2xl bg-windwardBlue text-base font-bold"
+          onClick={() => newRace()}
         >
           + Новая гонка
         </button>
@@ -183,7 +167,7 @@ function NoLineCta() {
   const setDrawer = useSailingStore((s) => s.setDrawer);
   return (
     <button
-      className="w-full min-h-[88px] rounded-2xl bg-windwardBlue text-2xl font-extrabold"
+      className="w-full min-h-[72px] rounded-2xl bg-windwardBlue text-xl font-extrabold"
       onClick={() => setDrawer('setup')}
     >
       Поставить линию
@@ -191,29 +175,53 @@ function NoLineCta() {
   );
 }
 
-function BiasVerdict({ bias }: { bias: ReturnType<typeof computeLineBias> }) {
-  if (bias.favored === 'neutral') {
-    return (
-      <div className="text-center text-white/80">
-        <div className="text-2xl font-bold">ЛИНИЯ РОВНАЯ</div>
-        <div className="text-sm">|bias| &lt; 1.5°</div>
-      </div>
-    );
-  }
+function BiasVerdict({
+  bias,
+  skew
+}: {
+  bias: ReturnType<typeof computeLineBias>;
+  skew: ReturnType<typeof computeCourseSkew> | null;
+}) {
+  const isNeutral = bias.favored === 'neutral';
   const isPin = bias.favored === 'pin';
+  const arrow = isNeutral ? '·' : isPin ? '←' : '→';
+  const color = isNeutral
+    ? 'text-white/70'
+    : isPin
+    ? 'text-pinRed'
+    : 'text-committeeGreen';
+  const label = isNeutral
+    ? 'ЛИНИЯ РОВНАЯ'
+    : `${isPin ? 'PIN' : 'СУДЬЯ'} ВЫГОДНЕЕ`;
+
   return (
-    <div className="flex items-center justify-center gap-3">
-      <div className={`text-7xl ${isPin ? 'text-pinRed' : 'text-committeeGreen'}`}>
-        {isPin ? '←' : '→'}
+    <div className="flex flex-col items-center gap-1">
+      <div className="flex items-center justify-center gap-3 leading-none">
+        <div className={`text-5xl ${color}`}>{arrow}</div>
+        <div className={`text-xl font-extrabold ${color} tracking-tight`}>{label}</div>
+        {!isNeutral && (
+          <div className="text-base tabular-nums text-white/80">
+            {Math.round(Math.abs(bias.degrees))}° · +{Math.round(bias.advantageMeters)}м
+          </div>
+        )}
       </div>
-      <div className="leading-tight">
-        <div className={`text-3xl font-extrabold ${isPin ? 'text-pinRed' : 'text-committeeGreen'}`}>
-          {isPin ? 'PIN' : 'СУДЬЯ'} ВЫГОДНЕЕ
+      {skew ? (
+        <div
+          className={`text-sm font-bold tracking-wide ${
+            skew.favored === 'starboard'
+              ? 'text-committeeGreen'
+              : skew.favored === 'port'
+              ? 'text-pinRed'
+              : 'text-white/60'
+          }`}
+        >
+          {skew.favored === 'starboard'
+            ? `ДИСТАНЦИЯ: ПРАВО +${Math.round(Math.abs(skew.degrees))}°`
+            : skew.favored === 'port'
+            ? `ДИСТАНЦИЯ: ЛЕВО +${Math.round(Math.abs(skew.degrees))}°`
+            : 'ДИСТАНЦИЯ РОВНАЯ'}
         </div>
-        <div className="text-xl tabular-nums">
-          {Math.round(Math.abs(bias.degrees))}° · +{Math.round(bias.advantageMeters)} м
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -274,7 +282,7 @@ function MarkChip({
 
   return (
     <div
-      className="relative min-w-[64px] min-h-[56px] rounded-xl bg-white/5 px-2 flex flex-col items-center justify-center select-none touch-manipulation overflow-hidden"
+      className="relative min-w-[48px] h-11 rounded-xl bg-white/5 px-1.5 flex flex-col items-center justify-center select-none touch-manipulation overflow-hidden"
       onPointerDown={begin}
       onPointerUp={end}
       onPointerLeave={end}
@@ -282,8 +290,8 @@ function MarkChip({
       title={`${mark} (long-press = re-ping)`}
     >
       <div className="absolute inset-0 bg-white/20 origin-left" style={{ transform: `scaleX(${progress})` }} />
-      <div className={`relative z-10 text-2xl ${color}`}>{emoji}</div>
-      <div className="relative z-10 text-[10px] text-white/70">
+      <div className={`relative z-10 text-lg ${color} leading-none`}>{emoji}</div>
+      <div className="relative z-10 text-[9px] text-white/70 leading-none mt-0.5">
         {pingedAt ? formatAgo(Date.now() - pingedAt) : '—'}
       </div>
     </div>
@@ -292,9 +300,9 @@ function MarkChip({
 
 function FreshChip({ emoji, pingedAt }: { emoji: string; pingedAt: number | null }) {
   return (
-    <div className="min-w-[64px] min-h-[56px] rounded-xl bg-white/5 px-2 flex flex-col items-center justify-center">
-      <div className="text-2xl">{emoji}</div>
-      <div className="text-[10px] text-white/70">{pingedAt ? formatAgo(Date.now() - pingedAt) : '—'}</div>
+    <div className="min-w-[48px] h-11 rounded-xl bg-white/5 px-1.5 flex flex-col items-center justify-center">
+      <div className="text-lg leading-none">{emoji}</div>
+      <div className="text-[9px] text-white/70 leading-none mt-0.5">{pingedAt ? formatAgo(Date.now() - pingedAt) : '—'}</div>
     </div>
   );
 }
@@ -309,9 +317,9 @@ function formatAgo(ms: number): string {
 function warningText(w: { type: string; meters?: number; degrees?: number }): string {
   switch (w.type) {
     case 'lineTooShort':
-      return `линия короткая (${Math.round(w.meters ?? 0)}м), GPS-шум превышает разницу`;
+      return `линия короткая (${Math.round(w.meters ?? 0)}м), GPS-шум`;
     case 'biasNearlyAlongLine':
-      return `ветер почти вдоль линии (${Math.round(w.degrees ?? 0)}°), расчёт нестабилен`;
+      return `ветер почти вдоль линии (${Math.round(w.degrees ?? 0)}°)`;
     case 'windwardNotUpwind':
       return 'верхний буй не наветру? Проверь точки';
     default:

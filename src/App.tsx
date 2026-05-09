@@ -37,7 +37,7 @@ export function App() {
   const hasAnyMark = !!course?.pin || !!course?.committee || !!course?.windward;
 
   return (
-    <div className="h-screen w-screen overflow-hidden">
+    <div className="app-root w-screen overflow-hidden">
       {hasAnyMark ? <LiveDashboard /> : <EmptyLive />}
       <SetupSheet />
       <HistoryDrawer />
