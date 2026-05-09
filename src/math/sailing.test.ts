@@ -1,0 +1,187 @@
+import { describe, expect, it } from 'vitest';
+import {
+  computeCourseSkew,
+  computeLineBias,
+  distanceToSegment,
+  haversineDistance,
+  initialBearing,
+  midpoint,
+  NEUTRAL_THRESHOLD_DEG,
+  sanityWarnings,
+  timeToBurnSeconds,
+  wrap180,
+  wrap360
+} from './sailing';
+
+const PIN = { lat: 43.7000, lon: 7.2700 };
+const COMMITTEE = { lat: 43.7000, lon: 7.2712398 };
+const WINDWARD = { lat: 43.7045, lon: 7.27062 };
+
+describe('wrap helpers', () => {
+  it('wrap360 keeps values in [0, 360)', () => {
+    expect(wrap360(0)).toBe(0);
+    expect(wrap360(360)).toBe(0);
+    expect(wrap360(-1)).toBe(359);
+    expect(wrap360(720.5)).toBeCloseTo(0.5);
+  });
+
+  it('wrap180 keeps values in (-180, 180]', () => {
+    expect(wrap180(180)).toBe(180);
+    expect(wrap180(-180)).toBe(180);
+    expect(wrap180(190)).toBe(-170);
+    expect(wrap180(-190)).toBe(170);
+  });
+});
+
+describe('haversine + bearings', () => {
+  it('haversine line length is around 100m', () => {
+    const d = haversineDistance(PIN, COMMITTEE);
+    expect(d).toBeGreaterThan(95);
+    expect(d).toBeLessThan(105);
+  });
+
+  it('initial bearing PIN→COMMITTEE is ~90°', () => {
+    expect(initialBearing(PIN, COMMITTEE)).toBeCloseTo(90, 0);
+  });
+
+  it('midpoint lies between the two ends', () => {
+    const m = midpoint(PIN, COMMITTEE);
+    expect(m.lat).toBeCloseTo(43.7, 4);
+    expect(m.lon).toBeCloseTo((PIN.lon + COMMITTEE.lon) / 2, 4);
+  });
+});
+
+describe('computeLineBias', () => {
+  // Line bearing PIN→COMMITTEE = 90° (line lies west→east).
+  // Normal upwind = 0° (north).
+  const lineBearing = 90;
+  const lineLength = 100;
+
+  it('PIN favored when wind shifts left of line normal (TWD < 360 / left)', () => {
+    // wind from 350 → bias = wrap180(350 - 0) = -10 → COMMITTEE? Need bias > 0 → PIN.
+    // Actually bias = wrap180(TWD - (lineBearing - 90)) = wrap180(350 - 0) = -10
+    // So 350 → COMMITTEE favored. For PIN favored, wind must be 10° (right of north).
+    const bias = computeLineBias(lineBearing, 10, lineLength);
+    expect(bias.favored).toBe('pin');
+    expect(bias.degrees).toBeCloseTo(10, 5);
+    expect(bias.advantageMeters).toBeCloseTo(lineLength * Math.sin((10 * Math.PI) / 180), 3);
+  });
+
+  it('COMMITTEE favored when wind shifts the other way', () => {
+    const bias = computeLineBias(lineBearing, 350, lineLength);
+    expect(bias.favored).toBe('committee');
+    expect(bias.degrees).toBeCloseTo(-10, 5);
+  });
+
+  it('neutral when wind is exactly perpendicular to line', () => {
+    const bias = computeLineBias(lineBearing, 0, lineLength);
+    expect(bias.favored).toBe('neutral');
+    expect(Math.abs(bias.degrees)).toBeLessThan(NEUTRAL_THRESHOLD_DEG);
+  });
+
+  it('wrap-around: TWD 355° vs 5° give consistent answers', () => {
+    // Picked above the neutral threshold so that favored sides are decisive.
+    const a = computeLineBias(lineBearing, 355, lineLength);
+    const b = computeLineBias(lineBearing, 5, lineLength);
+    expect(a.favored).toBe('committee');
+    expect(b.favored).toBe('pin');
+    expect(Math.abs(a.degrees + b.degrees)).toBeLessThan(1e-9);
+  });
+
+  it('warns when wind nearly along line (|bias| > 80°)', () => {
+    // TWD = 85 → normal is 0 → bias = 85
+    const bias = computeLineBias(lineBearing, 85, 100);
+    const warnings = sanityWarnings(PIN, COMMITTEE, null, 85, bias);
+    expect(warnings.some((w) => w.type === 'biasNearlyAlongLine')).toBe(true);
+  });
+});
+
+describe('computeCourseSkew', () => {
+  const lineLength = 100;
+  // courseAxis from midpoint to windward (degrees true).
+  // skew = wrap180(courseAxis - TWD).
+
+  it('skew right (starboard side closer) when courseAxis > TWD', () => {
+    const skew = computeCourseSkew(15, 0, lineLength);
+    expect(skew.favored).toBe('starboard');
+    expect(skew.degrees).toBeCloseTo(15, 5);
+    expect(skew.advantageMeters).toBeCloseTo((lineLength / 2) * Math.sin((15 * Math.PI) / 180), 3);
+  });
+
+  it('skew left (port side closer) when courseAxis < TWD', () => {
+    const skew = computeCourseSkew(345, 0, lineLength);
+    expect(skew.favored).toBe('port');
+    expect(skew.degrees).toBeCloseTo(-15, 5);
+  });
+
+  it('neutral when courseAxis == TWD (windward directly upwind, downwind axis aligned)', () => {
+    // upwind from windward to mid is 180° relative to TWD; setting courseAxis == TWD
+    // gives skew = 0 → neutral
+    const skew = computeCourseSkew(180, 180, lineLength);
+    expect(skew.favored).toBe('neutral');
+  });
+});
+
+describe('distanceToSegment', () => {
+  it('point on the line segment is ~0m', () => {
+    const m = midpoint(PIN, COMMITTEE);
+    const d = distanceToSegment(m, PIN, COMMITTEE);
+    expect(d).toBeLessThan(0.5);
+  });
+
+  it('point off the segment returns positive distance', () => {
+    // Move ~10m north of midpoint (~0.00009 deg lat).
+    const m = midpoint(PIN, COMMITTEE);
+    const offset = { lat: m.lat + 0.0001, lon: m.lon };
+    const d = distanceToSegment(offset, PIN, COMMITTEE);
+    expect(d).toBeGreaterThan(8);
+    expect(d).toBeLessThan(15);
+  });
+
+  it('point past the end clamps to the endpoint', () => {
+    const past = { lat: PIN.lat, lon: PIN.lon - 0.001 };
+    const d = distanceToSegment(past, PIN, COMMITTEE);
+    const directToPin = haversineDistance(past, PIN);
+    expect(Math.abs(d - directToPin)).toBeLessThan(1.5);
+  });
+});
+
+describe('timeToBurnSeconds', () => {
+  it('returns null when speed is below threshold', () => {
+    expect(timeToBurnSeconds(100, 0.4)).toBeNull();
+    expect(timeToBurnSeconds(100, 0)).toBeNull();
+  });
+
+  it('returns distance/speed when speed is above threshold', () => {
+    expect(timeToBurnSeconds(100, 2)).toBeCloseTo(50, 5);
+  });
+
+  it('returns null for invalid inputs', () => {
+    expect(timeToBurnSeconds(-1, 5)).toBeNull();
+    expect(timeToBurnSeconds(Number.NaN, 5)).toBeNull();
+  });
+});
+
+describe('sanityWarnings', () => {
+  it('warns about a too-short line', () => {
+    const pinClose = { lat: 43.7, lon: 7.27 };
+    const cmtClose = { lat: 43.7, lon: 7.27006 }; // ~5m east
+    const bias = computeLineBias(90, 10, 5);
+    const warnings = sanityWarnings(pinClose, cmtClose, null, 10, bias);
+    expect(warnings.some((w) => w.type === 'lineTooShort')).toBe(true);
+  });
+
+  it('warns when windward is not upwind of mid', () => {
+    // windward placed SOUTH of line midpoint, but TWD says wind comes from north
+    const downwindMark = { lat: 43.6955, lon: 7.27062 };
+    const bias = computeLineBias(90, 0, haversineDistance(PIN, COMMITTEE));
+    const warnings = sanityWarnings(PIN, COMMITTEE, downwindMark, 0, bias);
+    expect(warnings.some((w) => w.type === 'windwardNotUpwind')).toBe(true);
+  });
+
+  it('no warnings for a healthy course', () => {
+    const bias = computeLineBias(90, 5, haversineDistance(PIN, COMMITTEE));
+    const warnings = sanityWarnings(PIN, COMMITTEE, WINDWARD, 5, bias);
+    expect(warnings.length).toBe(0);
+  });
+});
