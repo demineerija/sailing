@@ -36,10 +36,22 @@
   .drawer-overlay {
     z-index: 2000;
   }
-  /* Make sure Leaflet controls never overlap our overlays either. */
-  .leaflet-pane,
-  .leaflet-top,
-  .leaflet-bottom {
+  /* Cap map below drawer-overlay (2000) but keep popups above markers/HUD. */
+  .leaflet-container .leaflet-map-pane,
+  .leaflet-container .leaflet-tile-pane,
+  .leaflet-container .leaflet-overlay-pane,
+  .leaflet-container .leaflet-shadow-pane,
+  .leaflet-container .leaflet-marker-pane {
+    z-index: 400 !important;
+  }
+  .leaflet-container .leaflet-tooltip-pane {
+    z-index: 500 !important;
+  }
+  .leaflet-container .leaflet-popup-pane {
+    z-index: 650 !important;
+  }
+  .leaflet-container .leaflet-top,
+  .leaflet-container .leaflet-bottom {
     z-index: 400 !important;
   }
   /* Wind tooltip on the map: bold yellow on a dark pill, no arrow. */

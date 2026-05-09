@@ -5,13 +5,15 @@ import {
   CircleMarker,
   Marker,
   Polyline,
+  Popup,
   Tooltip,
   useMap,
   useMapEvent
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useSailingStore, type Course } from '../store/useSailingStore';
+import { loadAudio } from '../db/persistence';
+import { useSailingStore, type Course, type VoiceNote } from '../store/useSailingStore';
 import * as orientation from '../services/orientation';
 import type { LiveGps } from '../services/geolocation';
 import {
@@ -31,11 +33,14 @@ import {
 function FitBounds({
   course,
   live,
+  liveKey,
   userInteracted,
   onUserInteract
 }: {
   course: Course;
   live: LiveGps | null;
+  /** 1 when we have a GPS fix, 0 when not — refits once when fix appears. */
+  liveKey: number;
   userInteracted: boolean;
   onUserInteract: () => void;
 }) {
@@ -57,15 +62,17 @@ function FitBounds({
     if (course.pin) pts.push([course.pin.lat, course.pin.lon]);
     if (course.committee) pts.push([course.committee.lat, course.committee.lon]);
     if (course.windward) pts.push([course.windward.lat, course.windward.lon]);
-    if (pts.length === 0 && live) pts.push([live.coord.lat, live.coord.lon]);
+    if (live) pts.push([live.coord.lat, live.coord.lon]);
+    if (pts.length === 0) return;
     if (pts.length >= 2) {
-      map.fitBounds(pts, { padding: [40, 40], maxZoom: 17, animate: false });
-    } else if (pts.length === 1) {
+      map.fitBounds(pts, { padding: [50, 50], maxZoom: 17, animate: false });
+    } else {
       map.setView(pts[0], 16, { animate: false });
     }
-    // marksKey intentionally drives this effect; userInteracted guards it.
+    // Refit when marks change, when user re-enables auto-fit, or when GPS
+    // first appears (liveKey) so the boat is not left off-screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [marksKey, userInteracted]);
+  }, [marksKey, userInteracted, liveKey]);
 
   return null;
 }
@@ -87,6 +94,70 @@ function boatIcon(headingDeg: number): L.DivIcon {
   });
 }
 
+function VoiceNoteMapMarker({ note }: { note: VoiceNote }) {
+  if (note.lat === null || note.lon === null) return null;
+  return (
+    <CircleMarker
+      center={[note.lat, note.lon]}
+      radius={12}
+      pathOptions={{
+        color: '#fff',
+        weight: 3,
+        fillColor: '#a855f7',
+        fillOpacity: 0.95
+      }}
+    >
+      <Popup className="voice-popup">
+        <VoiceNotePopupBody note={note} />
+      </Popup>
+      <Tooltip direction="top" offset={[0, -6]}>
+        🎤 нажми — слушать
+      </Tooltip>
+    </CircleMarker>
+  );
+}
+
+function VoiceNotePopupBody({ note }: { note: VoiceNote }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let u: string | null = null;
+    let cancelled = false;
+    (async () => {
+      const blob = await loadAudio(note.audioId);
+      if (cancelled) return;
+      if (!blob) {
+        setErr('Запись не найдена');
+        setLoading(false);
+        return;
+      }
+      u = URL.createObjectURL(blob);
+      setUrl(u);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+      if (u) URL.revokeObjectURL(u);
+    };
+  }, [note.audioId]);
+
+  return (
+    <div className="min-w-[220px] text-gray-900">
+      <div className="text-sm font-bold mb-1">
+        {new Date(note.ts).toLocaleString('ru-RU')}
+      </div>
+      <div className="text-xs text-gray-600 mb-2">
+        {Math.round(note.durationMs / 1000)} с · голосовая метка
+      </div>
+      {loading && <div className="text-sm mb-2">Загружаю…</div>}
+      {err && <div className="text-red-600 text-sm mb-2">{err}</div>}
+      {url ? <audio controls src={url} className="w-full max-w-[280px]" preload="metadata" /> : null}
+    </div>
+  );
+}
+
 export function MapCanvas({ course, live }: { course: Course; live: LiveGps | null }) {
   const layLineDeg = useSailingStore((s) => s.settings.layLineDeg);
   const [userInteracted, setUserInteracted] = useState(false);
@@ -95,14 +166,19 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
   // course-over-ground value when compass is silent (e.g. no permission
   // granted yet, or the device just doesn't have one).
   const [compassHeading, setCompassHeading] = useState<number | null>(null);
+  // Always subscribe so we receive headings as soon as permission is granted
+  // (e.g. after the user taps «компас» on the HUD).
   useEffect(() => {
-    if (!orientation.isPermissionGranted()) return;
     return orientation.subscribe((h) => setCompassHeading(h));
   }, []);
   const boatHeading =
     compassHeading ??
     live?.headingTrue ??
     null;
+
+  async function requestCompassForBoat() {
+    await orientation.requestPermission();
+  }
 
   const initialCenter: [number, number] = useMemo(() => {
     if (course.pin && course.committee) {
@@ -160,7 +236,6 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
         center={initialCenter}
         zoom={15}
         className="w-full h-full rounded-2xl overflow-hidden"
-        preferCanvas
         attributionControl={false}
       >
         <TileLayer
@@ -171,6 +246,7 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
         <FitBounds
           course={course}
           live={live}
+          liveKey={live ? 1 : 0}
           userInteracted={userInteracted}
           onUserInteract={() => setUserInteracted(true)}
         />
@@ -298,19 +374,30 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
         )}
 
         {live && (
-          boatHeading !== null ? (
-            <Marker
-              position={[live.coord.lat, live.coord.lon]}
-              icon={boatIcon(boatHeading)}
-              interactive={false}
-            />
-          ) : (
+          <>
             <CircleMarker
               center={[live.coord.lat, live.coord.lon]}
-              radius={8}
-              pathOptions={{ color: '#fff', weight: 2, fillColor: '#FBBF24', fillOpacity: 1 }}
-            />
-          )
+              radius={14}
+              pathOptions={{
+                color: '#fff',
+                weight: 4,
+                fillColor: '#FBBF24',
+                fillOpacity: 1
+              }}
+            >
+              <Tooltip direction="bottom" offset={[0, 8]}>
+                ⚓ Вы (GPS ±{Math.round(live.accuracy)}м)
+              </Tooltip>
+            </CircleMarker>
+            {boatHeading !== null && (
+              <Marker
+                key={`hdg-${Math.round(boatHeading / 3) * 3}`}
+                position={[live.coord.lat, live.coord.lon]}
+                icon={boatIcon(boatHeading)}
+                zIndexOffset={700}
+              />
+            )}
+          </>
         )}
 
         {/* Wind vector — a fat yellow arrow on the map showing where the
@@ -392,25 +479,28 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
           );
         })()}
 
-        {/* Voice notes — purple circles with a tooltip for the recorded time. */}
-        {course.voiceNotes.map((n) =>
-          n.lat !== null && n.lon !== null ? (
-            <CircleMarker
-              key={n.id}
-              center={[n.lat, n.lon]}
-              radius={7}
-              pathOptions={{ color: '#fff', weight: 2, fillColor: '#a855f7', fillOpacity: 0.95 }}
-            >
-              <Tooltip direction="top" offset={[0, -4]}>
-                🎤 {new Date(n.ts).toLocaleTimeString('ru-RU')}
-              </Tooltip>
-            </CircleMarker>
-          ) : null
-        )}
+        {course.voiceNotes.map((n) => (
+          <VoiceNoteMapMarker key={n.id} note={n} />
+        ))}
       </MapContainer>
 
       <WindRose direction={course.windDirection} />
       <MapLegend hasLayline={!!layLines} hasLadder={!!ladders} />
+
+      {live ? (
+        <BoatHud
+          live={live}
+          headingDeg={boatHeading}
+          onRequestCompass={() => void requestCompassForBoat()}
+        />
+      ) : (
+        <div
+          className="absolute top-2 left-2 max-w-[min(200px,48vw)] rounded-xl bg-black/55 text-white text-[11px] px-2 py-1.5 leading-snug pointer-events-none"
+          style={{ zIndex: 450 }}
+        >
+          Нет GPS. Разрешите геолокацию — тогда появитесь на карте.
+        </div>
+      )}
 
       {userInteracted && (
         <button
@@ -424,6 +514,63 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
       )}
     </div>
   );
+}
+
+function BoatHud({
+  live,
+  headingDeg,
+  onRequestCompass
+}: {
+  live: LiveGps;
+  headingDeg: number | null;
+  onRequestCompass: () => void;
+}) {
+  const knots =
+    live.speedMps != null && live.speedMps >= 0
+      ? (live.speedMps * 1.94384).toFixed(1)
+      : '—';
+  const hdg = headingDeg !== null ? `${Math.round(headingDeg)}°` : '—';
+  const src =
+    headingDeg !== null
+      ? compassVsGpsHint(live.headingTrue, headingDeg)
+      : null;
+
+  return (
+    <div
+      className="absolute top-2 left-2 rounded-xl bg-navyDeep/92 border border-white/20 px-2.5 py-2 shadow-lg pointer-events-none"
+      style={{ zIndex: 450 }}
+    >
+      <div className="text-[10px] uppercase tracking-wide text-white/50">Катер</div>
+      <div className="text-windYellow text-lg font-black tabular-nums leading-none">
+        {knots} <span className="text-xs font-bold text-white/70">уз</span>
+      </div>
+      <div className="text-sm font-bold tabular-nums mt-0.5">
+        курс {hdg}
+      </div>
+      {src ? (
+        <div className="text-[9px] text-white/45 mt-0.5">{src}</div>
+      ) : null}
+      {headingDeg === null ? (
+        <button
+          type="button"
+          className="mt-1 w-full text-center text-[11px] font-bold text-cyan-300 active:opacity-70 pointer-events-auto touch-manipulation"
+          onClick={onRequestCompass}
+        >
+          🧭 Разрешить компас
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function compassVsGpsHint(
+  gpsHdg: number | null,
+  shown: number
+): string | null {
+  if (gpsHdg === null) return 'компас';
+  const d = Math.abs((((gpsHdg - shown + 540) % 360) - 180));
+  if (d < 12) return 'GPS+компас';
+  return 'компас (GPS курс часто пустой на месте)';
 }
 
 function WindRose({ direction }: { direction: number | null }) {
