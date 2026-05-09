@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { pingWithAveraging } from '../services/geolocation';
+import { pingProjected } from '../services/pingProjected';
 import type { GeoCoord } from '../math/sailing';
 
 type Props = {
@@ -10,12 +10,25 @@ type Props = {
   onPing: (coord: GeoCoord, accuracy: number, samples: number) => void;
   pingedAt?: number | null;
   accuracyHint?: number | null;
+  /** If non-zero, the GPS fix is projected this far in the direction the
+   *  boat is pointing (averaged compass during the hold). Negative = behind. */
+  offsetMeters?: number;
 };
 
-export function PingButton({ label, emoji, color, holdMs, onPing, pingedAt, accuracyHint }: Props) {
+export function PingButton({
+  label,
+  emoji,
+  color,
+  holdMs,
+  onPing,
+  pingedAt,
+  accuracyHint,
+  offsetMeters = 0
+}: Props) {
   const [progress, setProgress] = useState(0);
   const [pinging, setPinging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const rafRef = useRef<number | null>(null);
   const startedAt = useRef<number>(0);
   const cancelled = useRef(false);
@@ -33,14 +46,28 @@ export function PingButton({ label, emoji, color, holdMs, onPing, pingedAt, accu
     if (pinging) return;
     cancelled.current = false;
     setError(null);
+    setInfo(null);
     setPinging(true);
     setProgress(0);
     startedAt.current = performance.now();
     rafRef.current = requestAnimationFrame(tick);
     try {
-      const r = await pingWithAveraging(holdMs);
+      const r = await pingProjected(holdMs, offsetMeters);
       if (!cancelled.current) {
         onPing(r.coord, r.accuracy, r.samples);
+        if (offsetMeters !== 0) {
+          if (r.offsetApplied !== 0 && r.headingTrue !== null) {
+            setInfo(
+              `смещено на ${offsetMeters > 0 ? '+' : ''}${offsetMeters}м (курс ${Math.round(
+                r.headingTrue
+              )}°)`
+            );
+          } else {
+            setInfo(
+              `компас не дал данных — поставил ровно по своей точке`
+            );
+          }
+        }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'GPS ошибка';
@@ -94,6 +121,7 @@ export function PingButton({ label, emoji, color, holdMs, onPing, pingedAt, accu
         <span>зафиксировано: {pingedLabel}</span>
       </div>
       {error ? <div className="text-pinRed text-sm px-2">{error}</div> : null}
+      {info ? <div className="text-windYellow text-xs px-2">{info}</div> : null}
     </div>
   );
 }

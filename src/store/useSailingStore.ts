@@ -92,7 +92,6 @@ export type DrawerKind =
   | 'timer'
   | 'voice'
   | 'drift'
-  | 'pingDist'
   | null;
 
 export type PersistedRoot = {

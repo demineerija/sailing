@@ -157,6 +157,7 @@ export function SetupSheet() {
             emoji="📍"
             color="bg-pinRed"
             holdMs={settings.holdMs}
+            offsetMeters={settings.pingAtDistanceMeters}
             pingedAt={course?.pin?.ts ?? null}
             accuracyHint={liveGps?.accuracy ?? null}
             onPing={(coord, accuracy) => pingMark('pin', coord, accuracy)}
@@ -166,6 +167,7 @@ export function SetupSheet() {
             emoji="🚩"
             color="bg-committeeGreen"
             holdMs={settings.holdMs}
+            offsetMeters={settings.pingAtDistanceMeters}
             pingedAt={course?.committee?.ts ?? null}
             accuracyHint={liveGps?.accuracy ?? null}
             onPing={(coord, accuracy) => pingMark('committee', coord, accuracy)}
@@ -175,11 +177,19 @@ export function SetupSheet() {
             emoji="🔺"
             color="bg-windwardBlue"
             holdMs={settings.holdMs}
+            offsetMeters={settings.pingAtDistanceMeters}
             pingedAt={course?.windward?.ts ?? null}
             accuracyHint={liveGps?.accuracy ?? null}
             onPing={(coord, accuracy) => pingMark('windward', coord, accuracy)}
           />
         </div>
+
+        {settings.pingAtDistanceMeters !== 0 && (
+          <div className="text-xs text-windYellow mt-2 leading-snug">
+            Постановка со смещением: {settings.pingAtDistanceMeters > 0 ? '+' : ''}
+            {settings.pingAtDistanceMeters}м по носу. Меняется в Настройках.
+          </div>
+        )}
 
         <div className="mt-6 p-3 bg-navy rounded-2xl">
           <div className="text-lg font-semibold mb-2">Ветер</div>

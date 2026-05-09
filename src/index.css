@@ -42,6 +42,19 @@
   .leaflet-bottom {
     z-index: 400 !important;
   }
+  /* Wind tooltip on the map: bold yellow on a dark pill, no arrow. */
+  .leaflet-tooltip.wind-label {
+    background: rgba(6, 16, 28, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fbbf24;
+    font-weight: 800;
+    font-size: 12px;
+    padding: 2px 6px;
+    box-shadow: none;
+  }
+  .leaflet-tooltip.wind-label::before {
+    display: none;
+  }
 }
 
 @layer utilities {

@@ -56,6 +56,38 @@ export function SettingsView() {
           </Row>
         </Section>
 
+        <Section title="Постановка точек">
+          <div className="bg-navy rounded-xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-base">Смещение по носу</div>
+              <div className="tabular-nums text-windYellow font-bold w-16 text-right">
+                {settings.pingAtDistanceMeters > 0 ? '+' : ''}
+                {settings.pingAtDistanceMeters}м
+              </div>
+            </div>
+            <input
+              type="range"
+              min={-30}
+              max={30}
+              step={1}
+              value={settings.pingAtDistanceMeters}
+              onChange={(e) =>
+                setSettings({
+                  pingAtDistanceMeters: parseInt(e.target.value, 10) || 0
+                })
+              }
+              className="w-full"
+            />
+            <div className="text-xs text-white/60 mt-2 leading-snug">
+              Когда ты ставишь PIN/СУДЬЯ/ВЕРХ, программа берёт твоё GPS и
+              сместит точку на это расстояние ВПЕРЁД по направлению, куда
+              смотрит нос катера. Удобно, чтобы не подходить вплотную к
+              бую и не мешать гонщикам. Поставь 0, чтобы ставить ровно по
+              своей позиции.
+            </div>
+          </div>
+        </Section>
+
         <Section title="Ветер из интернета">
           <Row label="Авто-обновление">
             <select

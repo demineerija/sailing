@@ -12,7 +12,7 @@ import { WindChart } from './views/WindChart';
 import { TimerFullscreen } from './views/TimerView';
 import { VoiceNotesDrawer } from './views/VoiceNotesDrawer';
 import { DriftDrawer } from './views/DriftDrawer';
-import { PingAtDistanceDrawer } from './views/PingAtDistanceDrawer';
+import { WindDrawer } from './views/WindDrawer';
 
 export function App() {
   const hasOnboarded = useSailingStore((s) => s.hasOnboarded);
@@ -81,7 +81,7 @@ export function App() {
       <TimerFullscreen />
       <VoiceNotesDrawer />
       <DriftDrawer />
-      <PingAtDistanceDrawer />
+      <WindDrawer />
     </div>
   );
 }

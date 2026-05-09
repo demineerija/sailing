@@ -45,21 +45,27 @@ export function SchemaCanvas({ course }: Props) {
   const W = 600;
   const H = 600;
   const cx = W / 2;
-  const lineY = H * 0.78;
-  const halfLine = W * 0.32;
+  const lineY = H * 0.82; // line near the bottom
+  const topPad = 70; // breathing room for ВЕРХ label and wind arrow
+  const sidePad = 60;
 
-  // Compute windward position based on courseAxis vs line normal.
-  // Line is drawn horizontally with PIN on left, COMMITTEE on right.
-  // Line bearing = +90° relative to "north" of schema. North in schema = up.
-  // We render windward "up" with horizontal offset proportional to skew.
+  // Real-world distances in metres.
   const lineLength = data.lineLength;
   const skewDeg = data.skew?.degrees ?? 0;
   const distanceToWindward = course.windward
     ? haversineDistance(midpoint(course.pin, course.committee), course.windward)
     : lineLength * 3;
-  const px = halfLine * 2;
-  const yScale = (px / Math.max(lineLength, 1)) * 0.45; // tighten vertical
-  const wWY = lineY - distanceToWindward * yScale;
+
+  // Pick a single uniform pixels-per-metre scale that fits BOTH the line
+  // (constrained by canvas width) AND the windward distance (constrained by
+  // available vertical room above the line). Cap the line at ~70% of width.
+  const maxLinePx = (W - 2 * sidePad) * 0.95;
+  const maxWindwardPx = lineY - topPad;
+  const ppmFromLine = maxLinePx / Math.max(lineLength, 1);
+  const ppmFromWindward = maxWindwardPx / Math.max(distanceToWindward, 1);
+  const ppm = Math.min(ppmFromLine, ppmFromWindward);
+  const halfLine = (lineLength * ppm) / 2;
+  const wWY = lineY - distanceToWindward * ppm;
   const wWX = cx + Math.tan((skewDeg * Math.PI) / 180) * (lineY - wWY);
 
   const twd = course.windDirection;
@@ -72,7 +78,7 @@ export function SchemaCanvas({ course }: Props) {
 
   // Ladder spacing is half the screen distance between line and windward.
   const ladderStep = course.windward ? Math.max(28, (lineY - wWY) / 5) : 60;
-  const ladderHalfWidth = halfLine * 1.6;
+  const ladderHalfWidth = Math.max(halfLine * 1.6, W * 0.55);
 
   const ladderRungs = twd !== null
     ? buildSchemaLadder({

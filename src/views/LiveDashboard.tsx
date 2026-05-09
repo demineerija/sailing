@@ -11,7 +11,7 @@ import {
 } from '../math/sailing';
 import { selectCurrentCourse, useSailingStore, type MarkKey } from '../store/useSailingStore';
 import * as wakeLock from '../services/wakeLock';
-import { pingWithAveraging } from '../services/geolocation';
+import { pingProjected } from '../services/pingProjected';
 import { SchemaCanvas } from './SchemaCanvas';
 import { MapCanvas } from './MapCanvas';
 import { TimerCompact } from './TimerView';
@@ -25,6 +25,7 @@ export function LiveDashboard() {
   const pingMark = useSailingStore((s) => s.pingMark);
   const newRace = useSailingStore((s) => s.newRace);
   const holdMs = useSailingStore((s) => s.settings.holdMs);
+  const pingOffset = useSailingStore((s) => s.settings.pingAtDistanceMeters);
 
   useEffect(() => {
     void wakeLock.acquire();
@@ -70,9 +71,9 @@ export function LiveDashboard() {
         >
           ≡
         </button>
-        <MarkChip mark="pin" emoji="📍" color="text-pinRed" pingedAt={course.pin?.ts ?? null} holdMs={holdMs} onRePing={(c, a) => pingMark('pin', c, a)} />
-        <MarkChip mark="committee" emoji="🚩" color="text-committeeGreen" pingedAt={course.committee?.ts ?? null} holdMs={holdMs} onRePing={(c, a) => pingMark('committee', c, a)} />
-        <MarkChip mark="windward" emoji="🔺" color="text-windwardBlue" pingedAt={course.windward?.ts ?? null} holdMs={holdMs} onRePing={(c, a) => pingMark('windward', c, a)} />
+        <MarkChip mark="pin" emoji="📍" color="text-pinRed" pingedAt={course.pin?.ts ?? null} holdMs={holdMs} offsetMeters={pingOffset} onRePing={(c, a) => pingMark('pin', c, a)} />
+        <MarkChip mark="committee" emoji="🚩" color="text-committeeGreen" pingedAt={course.committee?.ts ?? null} holdMs={holdMs} offsetMeters={pingOffset} onRePing={(c, a) => pingMark('committee', c, a)} />
+        <MarkChip mark="windward" emoji="🔺" color="text-windwardBlue" pingedAt={course.windward?.ts ?? null} holdMs={holdMs} offsetMeters={pingOffset} onRePing={(c, a) => pingMark('windward', c, a)} />
         <FreshChip emoji="🌬" pingedAt={course.windSetAt ?? null} />
         <div className="ml-auto flex bg-white/10 rounded-xl overflow-hidden">
           <button
@@ -147,6 +148,13 @@ export function LiveDashboard() {
 
       <div className="grid grid-cols-3 gap-1.5 px-2 shrink-0">
         <button
+          className="min-h-[44px] rounded-xl bg-windYellow text-navy text-sm font-bold flex items-center justify-center gap-1"
+          onClick={() => setDrawer('wind')}
+          title="Указать ветер"
+        >
+          🌬 Ветер
+        </button>
+        <button
           className="min-h-[44px] rounded-xl bg-pinRed/90 text-sm font-bold flex items-center justify-center gap-1"
           onClick={() => setDrawer('voice')}
           title="Голосовая метка"
@@ -154,18 +162,11 @@ export function LiveDashboard() {
           🎤 Голос
         </button>
         <button
-          className="min-h-[44px] rounded-xl bg-windYellow text-navy text-sm font-bold flex items-center justify-center gap-1"
+          className="min-h-[44px] rounded-xl bg-cyan-500/90 text-navy text-sm font-bold flex items-center justify-center gap-1"
           onClick={() => setDrawer('drift')}
           title="Замер течения"
         >
           ⛵ Течение
-        </button>
-        <button
-          className="min-h-[44px] rounded-xl bg-windwardBlue/90 text-white text-sm font-bold flex items-center justify-center gap-1"
-          onClick={() => setDrawer('pingDist')}
-          title="Поставить точку на расстоянии"
-        >
-          📍 На расст.
         </button>
       </div>
 
@@ -256,6 +257,7 @@ function MarkChip({
   color,
   pingedAt,
   holdMs,
+  offsetMeters,
   onRePing
 }: {
   mark: MarkKey;
@@ -263,6 +265,7 @@ function MarkChip({
   color: string;
   pingedAt: number | null;
   holdMs: number;
+  offsetMeters: number;
   onRePing: (coord: { lat: number; lon: number }, accuracy?: number) => void;
 }) {
   const [progress, setProgress] = useState(0);
@@ -286,7 +289,7 @@ function MarkChip({
     start.current = performance.now();
     rafRef.current = requestAnimationFrame(tick);
     try {
-      const r = await pingWithAveraging(holdMs);
+      const r = await pingProjected(holdMs, offsetMeters);
       if (!cancelled.current) onRePing(r.coord, r.accuracy);
     } catch {
       // swallow — quick re-ping should fail silently in top bar
