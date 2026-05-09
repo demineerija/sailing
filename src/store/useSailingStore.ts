@@ -75,7 +75,7 @@ export type Settings = {
   headingMode: HeadingMode;
   holdMs: 1500 | 2500 | 4000;
   sound: boolean;
-  layLineDeg: number; // 40..50
+  layLineDeg: number; // ~38–55 (typical tacking angle °)
   /** Auto-refresh wind from Open-Meteo every N minutes. 0 disables. */
   autoWindMinutes: 0 | 5 | 10 | 15 | 30;
   /** Default offset (in metres) for "Ping at Distance". Negative = behind. */
@@ -155,7 +155,7 @@ const DEFAULT_SETTINGS: Settings = {
   headingMode: 'true',
   holdMs: 2500,
   sound: true,
-  layLineDeg: 45,
+  layLineDeg: 46,
   autoWindMinutes: 0,
   pingAtDistanceMeters: 5,
   windCompassFlip180: false

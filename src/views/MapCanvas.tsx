@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -98,13 +98,87 @@ function boatIcon(headingDeg: number): L.DivIcon {
   });
 }
 
-function MapBearingSync({ bearingDeg }: { bearingDeg: number }) {
+/**
+ * When `followCourse` is true, keeps leafmap bearing synced to course/wind.
+ * Any map rotation not marked programmatic is treated as manual — parent
+ * clears `followCourse` via `onUserRotatedAway` so pinch/Shift+wheel can
+ * override the automated orientation.
+ */
+function MapRotationFollow({
+  courseBearingDeg,
+  followCourse,
+  onUserRotatedAway
+}: {
+  courseBearingDeg: number;
+  followCourse: boolean;
+  onUserRotatedAway: () => void;
+}) {
   const map = useMap();
+  const programmaticRef = useRef(false);
+
   useEffect(() => {
     const m = map as L.Map;
     if (!m.options.rotate) return;
-    m.setBearing(bearingDeg);
-  }, [map, bearingDeg]);
+    const onRotate = () => {
+      if (programmaticRef.current) return;
+      onUserRotatedAway();
+    };
+    m.on('rotate', onRotate);
+    return () => {
+      m.off('rotate', onRotate);
+    };
+  }, [map, onUserRotatedAway]);
+
+  useEffect(() => {
+    const m = map as L.Map;
+    if (!m.options.rotate || !followCourse) return;
+    programmaticRef.current = true;
+    m.setBearing(courseBearingDeg);
+    const t = window.setTimeout(() => {
+      programmaticRef.current = false;
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [map, courseBearingDeg, followCourse]);
+
+  return null;
+}
+
+/** Track actual leaflet bearing so the boat SVG stays aligned when the user rotates. */
+function LiveMapBearingTracker({
+  reportBearing
+}: {
+  reportBearing: (deg: number) => void;
+}) {
+  const map = useMap();
+  const raf = useRef<number | null>(null);
+
+  useEffect(() => {
+    const m = map as L.Map;
+    if (!m.options.rotate || typeof (m as L.Map).getBearing !== 'function') {
+      reportBearing(0);
+      return;
+    }
+
+    const push = () => {
+      reportBearing(m.getBearing());
+    };
+
+    const throttled = () => {
+      if (raf.current != null) return;
+      raf.current = requestAnimationFrame(() => {
+        raf.current = null;
+        push();
+      });
+    };
+
+    m.on('rotate', throttled);
+    push();
+    return () => {
+      m.off('rotate', throttled);
+      if (raf.current != null) cancelAnimationFrame(raf.current);
+    };
+  }, [map, reportBearing]);
+
   return null;
 }
 
@@ -245,6 +319,22 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
     return 0;
   }, [course.windward, course.pin, course.committee, course.windDirection]);
 
+  /** Auto-align map to ВЕРХ / ветру; пользователь может крутить двумя пальцами. */
+  const [followCourseRotation, setFollowCourseRotation] = useState(true);
+  const [liveMapBearingDeg, setLiveMapBearingDeg] = useState(mapBearingDeg);
+
+  useEffect(() => {
+    if (followCourseRotation) setLiveMapBearingDeg(mapBearingDeg);
+  }, [mapBearingDeg, followCourseRotation]);
+
+  const handleUserRotatedMap = useCallback(() => {
+    setFollowCourseRotation(false);
+  }, []);
+
+  const reportLiveBearing = useCallback((deg: number) => {
+    setLiveMapBearingDeg(deg);
+  }, []);
+
   const phoneHeadingForPanel = compassHeading ?? live?.headingTrue ?? null;
   const speedKmh =
     live && live.speedMps != null && live.speedMps >= 0
@@ -298,10 +388,15 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
         bearing={mapBearingDeg}
         rotateControl={false}
         compassBearing={false}
-        touchRotate={false}
-        shiftKeyRotate={false}
+        touchRotate
+        shiftKeyRotate
       >
-        <MapBearingSync bearingDeg={mapBearingDeg} />
+        <MapRotationFollow
+          courseBearingDeg={mapBearingDeg}
+          followCourse={followCourseRotation}
+          onUserRotatedAway={handleUserRotatedMap}
+        />
+        <LiveMapBearingTracker reportBearing={reportLiveBearing} />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
@@ -456,7 +551,7 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
             {boatHeading !== null ? (
               <Marker
                 position={[live.coord.lat, live.coord.lon]}
-                icon={boatIcon(wrap360(boatHeading - mapBearingDeg))}
+                icon={boatIcon(wrap360(boatHeading - liveMapBearingDeg))}
                 zIndexOffset={700}
               />
             ) : null}
@@ -569,16 +664,32 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
         </div>
       )}
 
-      {userInteracted && (
-        <button
-          type="button"
-          className="absolute bottom-2 right-2 px-3 h-9 rounded-full bg-windwardBlue text-white text-xs font-bold shadow"
-          style={{ zIndex: 410 }}
-          onClick={() => setUserInteracted(false)}
-        >
-          ⤾ центрировать
-        </button>
-      )}
+      <div
+        className="absolute bottom-3 right-2 flex flex-col items-end gap-1.5 pointer-events-none max-w-[min(100vw-16px,200px)]"
+        style={{ zIndex: 480 }}
+      >
+        {!followCourseRotation && (
+          <button
+            type="button"
+            className="pointer-events-auto touch-manipulation px-3 py-2 rounded-xl bg-[#fbbf24] text-[#0b1a2b] text-xs font-extrabold shadow-lg active:opacity-90"
+            onClick={() => setFollowCourseRotation(true)}
+          >
+            📐 Как было (по ВЕРХУ)
+          </button>
+        )}
+        {userInteracted && (
+          <button
+            type="button"
+            className="pointer-events-auto touch-manipulation px-3 py-2 rounded-xl bg-[#2563eb] text-white text-xs font-bold shadow-lg"
+            onClick={() => setUserInteracted(false)}
+          >
+            ⤾ В кадр
+          </button>
+        )}
+        <div className="pointer-events-none text-[10px] text-white/95 font-semibold px-2 py-1 rounded-lg bg-black/55 max-w-[12rem] text-right leading-snug shadow">
+          Карту можно крутить двумя пальцами. На компьютере: Shift + колесо.
+        </div>
+      </div>
     </div>
   );
 }
@@ -594,24 +705,30 @@ function BoatHud({
 }) {
   return (
     <div
-      className="absolute top-2 left-2 rounded-xl bg-navyDeep/92 border border-white/20 px-2.5 py-2 shadow-lg pointer-events-none"
-      style={{ zIndex: 450 }}
+      className="absolute top-2 left-2 rounded-2xl px-2.5 py-2 shadow-xl pointer-events-none"
+      style={{
+        zIndex: 470,
+        background: 'rgba(15,23,42,0.96)',
+        border: '2px solid #38bdf8',
+        color: '#fffbeb'
+      }}
     >
-      <div className="text-[10px] uppercase tracking-wide text-white/50">точность GPS</div>
-      <div className="text-windYellow text-base font-black tabular-nums leading-none">
+      <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#94a3b8' }}>GPS</div>
+      <div className="text-lg font-black tabular-nums leading-none" style={{ color: '#38bdf8' }}>
         ±{Math.round(live.accuracy)} м
       </div>
       {headingDeg === null ? (
         <button
           type="button"
-          className="mt-1 w-full text-center text-[11px] font-bold text-cyan-300 active:opacity-70 pointer-events-auto touch-manipulation"
+          className="mt-1 w-full text-center text-[11px] font-bold active:opacity-70 pointer-events-auto touch-manipulation rounded-lg py-1"
+          style={{ background: '#0ea5e9', color: '#0f172a' }}
           onClick={onRequestCompass}
         >
-          🧭 Разрешить компас
+          Разрешить компас
         </button>
       ) : null}
-      <div className="text-[9px] text-white/40 mt-1 leading-tight">
-        Курс и км/ч — справа вверху
+      <div className="text-[9px] mt-1 leading-tight" style={{ color: '#cbd5e1' }}>
+        Курс · км/ч — панель справа ↑
       </div>
     </div>
   );
@@ -629,63 +746,81 @@ function MapCompassPanel({
   const h = phoneHeadingDeg;
   return (
     <div
-      className="absolute top-2 right-2 flex flex-col items-center rounded-2xl bg-navyDeep/92 border border-white/20 px-2.5 py-2 shadow-lg pointer-events-none min-w-[5.5rem]"
-      style={{ zIndex: 450 }}
+      className="absolute top-2 right-2 flex flex-col items-center rounded-2xl px-2 py-2 min-w-[5.85rem] pointer-events-none shadow-2xl"
+      style={{
+        zIndex: 470,
+        background: 'rgba(15,23,42,0.97)',
+        border: '3px solid #facc15',
+        color: '#fffbeb'
+      }}
     >
-      <div className="relative w-14 h-14 shrink-0">
-        <svg viewBox="0 0 56 56" className="w-14 h-14" aria-hidden>
-          <circle
-            cx="28"
-            cy="28"
-            r="26"
-            fill="none"
-            stroke="rgba(255,255,255,0.35)"
-            strokeWidth="1.5"
-          />
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#facc15' }} className="mb-0.5">
+        Компас
+      </div>
+      <div className="relative w-[4.05rem] h-[4.05rem] shrink-0 rounded-full bg-slate-800">
+        <svg viewBox="0 0 56 56" className="absolute inset-0 w-full h-full" aria-hidden>
+          <defs>
+            <radialGradient id="compassGlow" cx="50%" cy="40%" r="60%">
+              <stop offset="0%" stopColor="#334155" />
+              <stop offset="100%" stopColor="#1e293b" />
+            </radialGradient>
+          </defs>
+          <circle cx="28" cy="28" r="26.5" fill="url(#compassGlow)" stroke="#fbbf24" strokeWidth="1.75" />
+          <circle cx="28" cy="28" r="2.2" fill="#fef08a" stroke="#78350f" strokeWidth="0.5" />
           <text
             x="28"
-            y="11"
+            y="12"
             textAnchor="middle"
-            fill="rgba(255,255,255,0.9)"
-            fontSize="9"
+            fill="#fef08a"
+            fontSize="10"
             fontWeight="bold"
           >
             N
           </text>
-          <text x="47" y="31" textAnchor="middle" fill="rgba(255,255,255,0.65)" fontSize="8">
+          <text x="46" y="31" textAnchor="middle" fill="#e2e8f0" fontSize="9" fontWeight="600">
             В
           </text>
-          <text x="28" y="50" textAnchor="middle" fill="rgba(255,255,255,0.65)" fontSize="8">
+          <text x="28" y="51" textAnchor="middle" fill="#e2e8f0" fontSize="9" fontWeight="600">
             Ю
           </text>
-          <text x="9" y="31" textAnchor="middle" fill="rgba(255,255,255,0.65)" fontSize="8">
+          <text x="10" y="31" textAnchor="middle" fill="#e2e8f0" fontSize="9" fontWeight="600">
             З
           </text>
           {h !== null ? (
             <g transform={`rotate(${h} 28 28)`}>
               <polygon
-                points="28,8 23,28 33,28"
-                fill="#FBBF24"
-                stroke="#fff"
-                strokeWidth="1"
+                points="28,10 23,28 33,28"
+                fill="#facc15"
+                stroke="#fefce8"
+                strokeWidth="1.25"
               />
             </g>
-          ) : null}
+          ) : (
+            <text x="28" y="34" textAnchor="middle" fill="#94a3b8" fontSize="9">
+              —
+            </text>
+          )}
         </svg>
       </div>
+      <div style={{ marginTop: 6, padding: '4px 6px', borderRadius: 8, background: '#1e293b' }} className="w-full">
+        <div style={{ fontSize: 11, fontWeight: 800, color: '#fef08a' }} className="text-center tabular-nums">
+          тел. {h !== null ? `${Math.round(h)}°` : '—'}
+        </div>
+      </div>
       {twd !== null ? (
-        <div className="text-[9px] text-windYellow font-extrabold tabular-nums leading-tight text-center mt-0.5">
-          ветер {Math.round(twd)}° откуда
+        <div
+          style={{ fontSize: 10, marginTop: 6, fontWeight: 700, color: '#bae6fd' }}
+          className="text-center leading-tight px-1"
+        >
+          ветер {Math.round(twd)}° (откуда)
         </div>
       ) : (
-        <div className="text-[9px] text-white/45 text-center mt-0.5">ветер не задан</div>
+        <div style={{ fontSize: 10, marginTop: 6, color: '#94a3b8' }} className="text-center">
+          Нет ветра
+        </div>
       )}
-      <div className="text-[11px] font-bold text-white tabular-nums mt-1">
-        тел. {h !== null ? `${Math.round(h)}°` : '—'}
-      </div>
-      <div className="text-sm font-black text-cyan-300 tabular-nums mt-0.5">
-        {speedKmh}{' '}
-        <span className="text-[10px] font-bold text-white/70">км/ч</span>
+      <div className="text-base font-black tabular-nums mt-1" style={{ color: '#5eead4' }}>
+        {speedKmh} <span className="text-xs font-bold opacity-95">км/ч</span>
       </div>
     </div>
   );
@@ -695,8 +830,13 @@ function MapLegend({ hasLayline, hasLadder }: { hasLayline: boolean; hasLadder: 
   if (!hasLayline && !hasLadder) return null;
   return (
     <div
-      className="absolute bottom-2 left-2 bg-navyDeep/85 border border-white/10 rounded-xl px-2 py-1.5 text-[10px] leading-tight pointer-events-none"
-      style={{ zIndex: 410 }}
+      className="absolute bottom-2 left-2 rounded-xl px-2 py-1.5 text-[10px] leading-tight pointer-events-none shadow-lg"
+      style={{
+        zIndex: 465,
+        background: 'rgba(15,23,42,0.94)',
+        border: '1px solid rgba(251,191,36,0.55)',
+        color: '#fefce8'
+      }}
     >
       {hasLadder && (
         <div className="flex items-center gap-1.5">

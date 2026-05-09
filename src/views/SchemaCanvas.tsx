@@ -6,7 +6,7 @@ import {
   initialBearing,
   midpoint
 } from '../math/sailing';
-import type { Course } from '../store/useSailingStore';
+import { useSailingStore, type Course } from '../store/useSailingStore';
 
 type Props = { course: Course };
 
@@ -15,6 +15,7 @@ type Props = { course: Course };
  * the course centroid; not a map projection — just enough to render layout.
  */
 export function SchemaCanvas({ course }: Props) {
+  const layLineDeg = useSailingStore((s) => s.settings.layLineDeg);
   const data = useMemo(() => {
     if (!course.pin || !course.committee) return null;
     const lineBearing = initialBearing(course.pin, course.committee);
@@ -96,13 +97,12 @@ export function SchemaCanvas({ course }: Props) {
   // Laylines from the windward mark, ±laylineDeg from downwind.
   // In schema coords downwind is "down" (positive Y) so we draw two lines
   // from windward into the lower half of the canvas.
-  const laylineDeg = 45; // matches sailing.ts default; settings is in degrees
   const laylineLen = Math.max(lineY * 1.4, 600);
   const laylinePort = course.windward && twd !== null
-    ? rotatedPoint(wWX, wWY, tiltDeg + 180 + laylineDeg, laylineLen)
+    ? rotatedPoint(wWX, wWY, tiltDeg + 180 + layLineDeg, laylineLen)
     : null;
   const laylineStb = course.windward && twd !== null
-    ? rotatedPoint(wWX, wWY, tiltDeg + 180 - laylineDeg, laylineLen)
+    ? rotatedPoint(wWX, wWY, tiltDeg + 180 - layLineDeg, laylineLen)
     : null;
 
   const windDirRad = ((course.windDirection ?? 0) * Math.PI) / 180;

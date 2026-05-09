@@ -44,16 +44,35 @@ export function SettingsView() {
               <option value={4000}>4 с</option>
             </select>
           </Row>
-          <Row label="Lay-line угол">
+          <Row label="Lay-line угол (°)">
             <input
               type="number"
-              min={40}
-              max={50}
+              min={38}
+              max={55}
+              step={1}
               value={settings.layLineDeg}
-              onChange={(e) => setSettings({ layLineDeg: Math.min(50, Math.max(40, parseInt(e.target.value, 10) || 45)) })}
-              className="bg-navy border border-white/10 rounded-xl p-2 text-lg w-20"
+              onChange={(e) =>
+                setSettings({
+                  layLineDeg: Math.min(55, Math.max(38, parseInt(e.target.value, 10) || 46))
+                })
+              }
+              className="bg-navy border border-white/10 rounded-xl p-2 text-lg w-[4.25rem]"
             />
           </Row>
+          <div className="text-xs text-white/50 px-1 -mt-2 mb-2">
+            На карте и схеме. По умолчанию 46° (типичный угол галса к истинному ветру).
+          </div>
+          <Row label="Компас ветра +180°">
+            <input
+              type="checkbox"
+              className="w-7 h-7"
+              checked={settings.windCompassFlip180}
+              onChange={(e) => setSettings({ windCompassFlip180: e.target.checked })}
+            />
+          </Row>
+          <div className="text-xs text-white/50 px-1 -mt-2 mb-1">
+            Включите, если ветер с компаса «перевёрнут». Иначе оставьте выкл.
+          </div>
         </Section>
 
         <Section title="Постановка точек">
@@ -85,18 +104,6 @@ export function SettingsView() {
               бую и не мешать гонщикам. Поставь 0, чтобы ставить ровно по
               своей позиции.
             </div>
-          </div>
-          <Row label="Компас ветра +180°">
-            <input
-              type="checkbox"
-              className="w-7 h-7"
-              checked={settings.windCompassFlip180}
-              onChange={(e) => setSettings({ windCompassFlip180: e.target.checked })}
-            />
-          </Row>
-          <div className="text-xs text-white/50 px-1 -mt-1 mb-1">
-            Если держишь телефон «наоборот» (верх вниз-ветер), включи — TWD
-            станет как с правильно ориентированным экраном.
           </div>
         </Section>
 

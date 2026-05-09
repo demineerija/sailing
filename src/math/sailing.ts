@@ -284,7 +284,7 @@ export type LayLines = {
  *
  * @param windward  the windward mark
  * @param windDirection TWD (where wind is FROM), degrees true
- * @param laylineDeg upwind angle off the wind, typically 40–50° (45° default)
+ * @param laylineDeg upwind angle off the wind, typically ~42–52° (e.g. 46° default in app settings)
  * @param lengthMeters how far down to draw each layline
  */
 export function laylines(
