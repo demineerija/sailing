@@ -25,7 +25,7 @@ export function WindChart() {
   if (drawer !== 'wind') return null;
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/40 flex items-end" onClick={() => setDrawer(null)}>
+    <div className="fixed inset-0 drawer-overlay bg-black/40 flex items-end" onClick={() => setDrawer(null)}>
       <div
         className="w-full bg-navyDeep rounded-t-3xl p-4 max-h-[80vh] safe-bottom"
         onClick={(e) => e.stopPropagation()}

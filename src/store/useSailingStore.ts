@@ -118,6 +118,10 @@ type Actions = {
   ensureRegatta: () => Regatta;
   ensureCurrentCourse: () => Course;
   newRace: () => void;
+  /** Switch the active course (e.g. when picking one from History). */
+  openCourse: (courseId: string) => void;
+  /** Drop the active course pointer so the empty-live screen shows again. */
+  closeCurrentCourse: () => void;
   pingMark: (mark: MarkKey, coord: GeoCoord, accuracy?: number) => void;
   setWind: (direction: number, source: WindReading['source'], speedMps?: number) => void;
   setNotes: (notes: string) => void;
@@ -294,6 +298,27 @@ export const useSailingStore = create<State & Actions>((set, get) => ({
         [regatta.id]: { ...regatta, courseIds: [...regatta.courseIds, c.id] }
       }
     });
+    scheduleSave(get);
+  },
+
+  openCourse: (courseId) => {
+    const s = get();
+    const course = s.courses[courseId];
+    if (!course) return;
+    // find the regatta this course belongs to (if any) and make it current too
+    const regatta = Object.values(s.regattas).find((r) =>
+      r.courseIds.includes(courseId)
+    );
+    set({
+      currentCourseId: courseId,
+      currentRegattaId: regatta?.id ?? s.currentRegattaId,
+      drawerOpen: null
+    });
+    scheduleSave(get);
+  },
+
+  closeCurrentCourse: () => {
+    set({ currentCourseId: null });
     scheduleSave(get);
   },
 

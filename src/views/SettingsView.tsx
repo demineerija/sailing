@@ -10,7 +10,7 @@ export function SettingsView() {
   if (drawer !== 'settings') return null;
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setDrawer(null)}>
+    <div className="fixed inset-0 drawer-overlay bg-black/40" onClick={() => setDrawer(null)}>
       <div
         className="absolute left-0 top-0 bottom-0 w-full sm:w-96 bg-navyDeep p-4 overflow-y-auto safe-top safe-bottom"
         onClick={(e) => e.stopPropagation()}

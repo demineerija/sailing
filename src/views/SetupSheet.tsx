@@ -131,7 +131,7 @@ export function SetupSheet() {
   }
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center" onClick={() => setDrawer(null)}>
+    <div className="fixed inset-0 drawer-overlay bg-black/40 flex items-end sm:items-center justify-center" onClick={() => setDrawer(null)}>
       <div
         className="w-full sm:max-w-2xl bg-navyDeep rounded-t-3xl sm:rounded-3xl p-4 max-h-[92dvh] overflow-y-auto safe-bottom"
         onClick={(e) => e.stopPropagation()}

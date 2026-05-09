@@ -86,7 +86,7 @@ export function PingAtDistanceDrawer() {
 
   return (
     <div
-      className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 drawer-overlay bg-black/40 flex items-end sm:items-center justify-center"
       onClick={() => setDrawer(null)}
     >
       <div

@@ -32,6 +32,16 @@
     height: 100svh;
     height: 100dvh;
   }
+  /* Drawer overlays must sit above Leaflet (its panes go up to z-index 700). */
+  .drawer-overlay {
+    z-index: 2000;
+  }
+  /* Make sure Leaflet controls never overlap our overlays either. */
+  .leaflet-pane,
+  .leaflet-top,
+  .leaflet-bottom {
+    z-index: 400 !important;
+  }
 }
 
 @layer utilities {

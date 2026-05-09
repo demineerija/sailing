@@ -34,7 +34,7 @@ export function TimerFullscreen() {
   const color = s.remainingSec <= 60 ? 'text-pinRed' : min <= 4 ? 'text-windYellow' : 'text-committeeGreen';
 
   return (
-    <div className="fixed inset-0 z-50 bg-navy flex flex-col safe-top safe-bottom">
+    <div className="fixed inset-0 drawer-overlay bg-navy flex flex-col safe-top safe-bottom">
       <div className="flex justify-end p-3">
         <button className="min-w-[64px] min-h-[64px] text-3xl" onClick={() => setDrawer(null)}>
           ✕

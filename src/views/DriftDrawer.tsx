@@ -99,106 +99,107 @@ export function DriftDrawer() {
 
   return (
     <div
-      className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 drawer-overlay bg-black/40 flex items-end sm:items-center justify-center"
       onClick={() => setDrawer(null)}
     >
       <div
-        className="w-full sm:max-w-xl bg-navyDeep rounded-t-3xl sm:rounded-3xl p-4 max-h-[92dvh] overflow-y-auto safe-bottom"
+        className="w-full sm:max-w-xl bg-navyDeep rounded-t-3xl sm:rounded-3xl max-h-[92dvh] flex flex-col safe-bottom"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between p-4 pb-2 shrink-0">
           <h2 className="text-xl sm:text-2xl font-bold">Замер течения</h2>
           <button className="min-w-[48px] min-h-[48px] text-2xl" onClick={() => setDrawer(null)}>
             ✕
           </button>
         </div>
 
-        <div className="text-sm text-white/70 mb-4 leading-relaxed">
-          Подойди к точке замера, заглуши мотор и не трогай руль 1–2 минуты.
-          Программа считает GPS-снос и выдаст вектор течения.
+        <div className="flex-1 overflow-y-auto px-4 pb-2 min-h-0">
+          <div className="text-sm text-white/70 mb-3 leading-relaxed">
+            Подойди к точке замера, заглуши мотор и не трогай руль 1–2 минуты.
+            Программа считает GPS-снос и выдаст вектор течения.
+          </div>
+
+          {error && <div className="text-pinRed text-sm mb-3">{error}</div>}
+
+          {current ? (
+            <div className="bg-navy rounded-2xl p-4">
+              <div className="text-sm text-white/60 mb-1">Сохранённое течение</div>
+              <div className="text-3xl font-extrabold text-windYellow">
+                {Math.round(current.setDirection)}° {bearingLabel(current.setDirection)}
+              </div>
+              <div className="text-xl mt-1 tabular-nums">
+                {mpsToKnots(current.speedMps).toFixed(2)} уз
+                <span className="text-white/50 text-sm ml-2">
+                  ({current.speedMps.toFixed(2)} м/с)
+                </span>
+              </div>
+              <div className="text-xs text-white/50 mt-2">
+                Снос {Math.round(current.distanceMeters)} м за{' '}
+                {Math.round(current.durationMs / 1000)}с,{' '}
+                {current.samples} GPS-точек,{' '}
+                {new Date(current.measuredAt).toLocaleTimeString('ru-RU')}.
+              </div>
+              <button
+                type="button"
+                onClick={onClear}
+                className="w-full mt-3 min-h-[44px] rounded-xl bg-white/10 text-sm"
+              >
+                Очистить
+              </button>
+            </div>
+          ) : (
+            <div className="text-center text-white/50 py-4 text-sm">
+              Ещё нет данных о течении.
+            </div>
+          )}
         </div>
 
-        {running ? (
-          <div className="bg-navy rounded-2xl p-4 mb-3">
-            <div className="text-center text-3xl font-bold tabular-nums">
-              {formatMs(elapsed)}
+        <div className="shrink-0 p-3 border-t border-white/10 bg-navyDeep">
+          {running ? (
+            <div className="space-y-2">
+              <div className="text-center text-2xl font-bold tabular-nums">
+                {formatMs(elapsed)}
+                <span className="text-sm text-white/60 ml-2">· {samples} точек</span>
+              </div>
+              <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full bg-windwardBlue"
+                  style={{ width: `${recommendedProgress * 100}%` }}
+                />
+              </div>
+              <div className="text-xs text-white/50 text-center">
+                {minProgress < 1
+                  ? `Минимум 30с (${Math.round(minProgress * 100)}%)`
+                  : 'Можно останавливать. Лучше — после 90с.'}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="min-h-[56px] rounded-2xl bg-white/10 text-base font-bold"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={onStop}
+                  disabled={minProgress < 1}
+                  className="min-h-[56px] rounded-2xl bg-committeeGreen text-white text-base font-bold disabled:opacity-50"
+                >
+                  Готово
+                </button>
+              </div>
             </div>
-            <div className="text-center text-sm text-white/60 mt-1">
-              GPS-точек: {samples}
-            </div>
-            <div className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
-              <div
-                className="h-full bg-windwardBlue"
-                style={{ width: `${recommendedProgress * 100}%` }}
-              />
-            </div>
-            <div className="text-xs text-white/50 mt-1 text-center">
-              {minProgress < 1
-                ? `Минимум 30с (${Math.round(minProgress * 100)}%)`
-                : 'Можно останавливать. Лучше — после 90с.'}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              <button
-                type="button"
-                onClick={onCancel}
-                className="min-h-[56px] rounded-2xl bg-white/10 text-base font-bold"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                onClick={onStop}
-                disabled={minProgress < 1}
-                className="min-h-[56px] rounded-2xl bg-committeeGreen text-white text-base font-bold disabled:opacity-50"
-              >
-                Готово
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={onStart}
-            className="w-full min-h-[88px] rounded-2xl bg-windwardBlue text-white text-2xl font-extrabold mb-3"
-          >
-            ⛵ Старт замера
-          </button>
-        )}
-
-        {error && <div className="text-pinRed text-sm mb-3">{error}</div>}
-
-        {current ? (
-          <div className="bg-navy rounded-2xl p-4">
-            <div className="text-sm text-white/60 mb-1">Сохранённое течение</div>
-            <div className="text-3xl font-extrabold text-windYellow">
-              {Math.round(current.setDirection)}° {bearingLabel(current.setDirection)}
-            </div>
-            <div className="text-xl mt-1 tabular-nums">
-              {mpsToKnots(current.speedMps).toFixed(2)} уз
-              <span className="text-white/50 text-sm ml-2">
-                ({current.speedMps.toFixed(2)} м/с)
-              </span>
-            </div>
-            <div className="text-xs text-white/50 mt-2">
-              Снос {Math.round(current.distanceMeters)} м за{' '}
-              {Math.round(current.durationMs / 1000)}с,{' '}
-              {current.samples} GPS-точек,{' '}
-              {new Date(current.measuredAt).toLocaleTimeString('ru-RU')}.
-            </div>
+          ) : (
             <button
               type="button"
-              onClick={onClear}
-              className="w-full mt-3 min-h-[44px] rounded-xl bg-white/10 text-sm"
+              onClick={onStart}
+              className="w-full min-h-[72px] rounded-2xl bg-windwardBlue text-white text-xl font-extrabold"
             >
-              Очистить
+              ⛵ Старт замера
             </button>
-          </div>
-        ) : (
-          <div className="text-center text-white/50 py-4 text-sm">
-            Ещё нет данных о течении.
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

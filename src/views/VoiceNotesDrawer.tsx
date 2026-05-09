@@ -100,71 +100,75 @@ export function VoiceNotesDrawer() {
 
   return (
     <div
-      className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 drawer-overlay bg-black/40 flex items-end sm:items-center justify-center"
       onClick={() => setDrawer(null)}
     >
       <div
-        className="w-full sm:max-w-xl bg-navyDeep rounded-t-3xl sm:rounded-3xl p-4 max-h-[92dvh] overflow-y-auto safe-bottom"
+        className="w-full sm:max-w-xl bg-navyDeep rounded-t-3xl sm:rounded-3xl max-h-[92dvh] flex flex-col safe-bottom"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-3">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 pb-2 shrink-0">
           <h2 className="text-xl sm:text-2xl font-bold">Голосовые метки</h2>
           <button className="min-w-[48px] min-h-[48px] text-2xl" onClick={() => setDrawer(null)}>
             ✕
           </button>
         </div>
 
-        {recording ? (
-          <div className="space-y-3">
-            <div className="text-center text-3xl font-bold text-pinRed">
-              ● {formatMs(elapsed)}
-            </div>
-            <div className="text-center text-sm text-white/60">Идёт запись… говори.</div>
-            <button
-              type="button"
-              onClick={onStop}
-              className="w-full min-h-[72px] rounded-2xl bg-committeeGreen text-white text-xl font-bold"
-            >
-              Стоп и сохранить
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="w-full min-h-[56px] rounded-2xl bg-white/10 text-base font-bold"
-            >
-              Отменить
-            </button>
+        {/* Scrollable list of past notes */}
+        <div className="flex-1 overflow-y-auto px-4 pb-2 min-h-0">
+          <div className="text-xs text-white/50 mb-3">
+            Каждая метка привязана к времени и GPS-координатам катера. Вечером на
+            разборе откроешь карту — увидишь, где была сделана.
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={onStart}
-            className="w-full min-h-[88px] rounded-2xl bg-pinRed text-white text-2xl font-extrabold flex items-center justify-center gap-3 mb-2"
-          >
-            🎤 Начать запись
-          </button>
-        )}
-
-        {error && <div className="text-pinRed text-sm mt-2">{error}</div>}
-
-        <div className="text-xs text-white/50 mt-2 mb-4">
-          Каждая метка автоматически привязана к текущему времени и координатам
-          катера. Слушай вечером на разборе и сразу видишь точку на карте.
+          {notes.length === 0 ? (
+            <div className="text-center text-white/50 py-8">Пока нет меток</div>
+          ) : (
+            <div className="space-y-2">
+              {notes.map((n) => (
+                <NoteRow
+                  key={n.id}
+                  note={n}
+                  onDelete={() => void removeVoiceNote(n.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {notes.length === 0 ? (
-          <div className="text-center text-white/50 py-8">Пока нет меток</div>
-        ) : (
-          <div className="space-y-2">
-            {notes.map((n) => (
-              <NoteRow
-                key={n.id}
-                note={n}
-                onDelete={() => void removeVoiceNote(n.id)}
-              />
-            ))}
-          </div>
-        )}
+        {/* Pinned recording controls — always visible, even with long history */}
+        <div className="shrink-0 p-3 border-t border-white/10 bg-navyDeep">
+          {recording ? (
+            <div className="space-y-2">
+              <div className="text-center text-2xl font-bold text-pinRed tabular-nums">
+                ● {formatMs(elapsed)}
+              </div>
+              <button
+                type="button"
+                onClick={onStop}
+                className="w-full min-h-[72px] rounded-2xl bg-committeeGreen text-white text-xl font-bold"
+              >
+                Стоп и сохранить
+              </button>
+              <button
+                type="button"
+                onClick={onCancel}
+                className="w-full min-h-[48px] rounded-2xl bg-white/10 text-sm font-bold"
+              >
+                Отменить
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onStart}
+              className="w-full min-h-[72px] rounded-2xl bg-pinRed text-white text-xl font-extrabold flex items-center justify-center gap-3"
+            >
+              🎤 Начать запись
+            </button>
+          )}
+          {error && <div className="text-pinRed text-sm mt-2">{error}</div>}
+        </div>
       </div>
     </div>
   );
