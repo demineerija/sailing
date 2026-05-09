@@ -62,6 +62,43 @@ export function SchemaCanvas({ course }: Props) {
   const wWY = lineY - distanceToWindward * yScale;
   const wWX = cx + Math.tan((skewDeg * Math.PI) / 180) * (lineY - wWY);
 
+  const twd = course.windDirection;
+  // Schema coords: North = "up" (i.e. line normal). The schema is rotated so
+  // the line is always drawn horizontally; ladder rungs and laylines must
+  // therefore be tilted by `twd - lineNormal = twd - (lineBearing - 90)`.
+  const lineNormalDeg = (data.lineBearing - 90 + 360) % 360;
+  const tiltDeg = twd !== null ? ((twd - lineNormalDeg + 540) % 360) - 180 : 0;
+  const tiltRad = (tiltDeg * Math.PI) / 180;
+
+  // Ladder spacing is half the screen distance between line and windward.
+  const ladderStep = course.windward ? Math.max(28, (lineY - wWY) / 5) : 60;
+  const ladderHalfWidth = halfLine * 1.6;
+
+  const ladderRungs = twd !== null
+    ? buildSchemaLadder({
+        anchorX: course.windward ? wWX : cx,
+        anchorY: course.windward ? wWY : lineY,
+        tiltRad,
+        step: ladderStep,
+        rungs: 11,
+        halfWidth: ladderHalfWidth,
+        clipMaxY: H + 50,
+        clipMinY: -50
+      })
+    : [];
+
+  // Laylines from the windward mark, ±laylineDeg from downwind.
+  // In schema coords downwind is "down" (positive Y) so we draw two lines
+  // from windward into the lower half of the canvas.
+  const laylineDeg = 45; // matches sailing.ts default; settings is in degrees
+  const laylineLen = Math.max(lineY * 1.4, 600);
+  const laylinePort = course.windward && twd !== null
+    ? rotatedPoint(wWX, wWY, tiltDeg + 180 + laylineDeg, laylineLen)
+    : null;
+  const laylineStb = course.windward && twd !== null
+    ? rotatedPoint(wWX, wWY, tiltDeg + 180 - laylineDeg, laylineLen)
+    : null;
+
   const windDirRad = ((course.windDirection ?? 0) * Math.PI) / 180;
   // Wind arrow points from where it comes from. In schema coords, north = up.
   // Arrow drawn near windward mark.
@@ -75,6 +112,47 @@ export function SchemaCanvas({ course }: Props) {
       preserveAspectRatio="xMidYMid meet"
     >
       <rect width={W} height={H} fill="#06101C" rx={20} />
+
+      {/* Ladder rungs — drawn first so everything else sits on top. */}
+      {ladderRungs.map((r, i) => (
+        <line
+          key={`rung-${i}`}
+          x1={r.x1}
+          y1={r.y1}
+          x2={r.x2}
+          y2={r.y2}
+          stroke={r.center ? '#FBBF24' : '#FFFFFF'}
+          strokeWidth={r.center ? 2 : 1}
+          strokeOpacity={r.center ? 0.6 : 0.18}
+          strokeDasharray={r.center ? undefined : '4 6'}
+        />
+      ))}
+
+      {/* Laylines (port = red, starboard = green) */}
+      {course.windward && laylinePort && laylineStb && (
+        <>
+          <line
+            x1={wWX}
+            y1={wWY}
+            x2={laylinePort.x}
+            y2={laylinePort.y}
+            stroke="#D5302E"
+            strokeWidth={3}
+            strokeOpacity={0.85}
+            strokeDasharray="8 8"
+          />
+          <line
+            x1={wWX}
+            y1={wWY}
+            x2={laylineStb.x}
+            y2={laylineStb.y}
+            stroke="#2EA043"
+            strokeWidth={3}
+            strokeOpacity={0.85}
+            strokeDasharray="8 8"
+          />
+        </>
+      )}
 
       {/* Course axis (mid → windward) */}
       {course.windward && (
@@ -179,4 +257,68 @@ export function SchemaCanvas({ course }: Props) {
       )}
     </svg>
   );
+}
+
+type SchemaRung = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  center: boolean;
+};
+
+/**
+ * Build the ladder of rungs in schema (SVG) coordinates. The ladder is
+ * perpendicular to the wind, which in our schema is rotated by `tiltRad`
+ * relative to "straight up". Returns segments clipped to the canvas height.
+ */
+function buildSchemaLadder(args: {
+  anchorX: number;
+  anchorY: number;
+  tiltRad: number;
+  step: number;
+  rungs: number;
+  halfWidth: number;
+  clipMinY: number;
+  clipMaxY: number;
+}): SchemaRung[] {
+  const half = Math.floor(args.rungs / 2);
+  // "Up the ladder" direction in schema coords = rotated `up` (-Y) by tilt.
+  const upX = Math.sin(args.tiltRad);
+  const upY = -Math.cos(args.tiltRad);
+  // Across-wind direction (perpendicular to wind, along the rung) = upDir
+  // rotated by 90° clockwise.
+  const acX = -upY;
+  const acY = upX;
+  const out: SchemaRung[] = [];
+  for (let i = -half; i <= half; i++) {
+    const cx = args.anchorX + upX * args.step * i;
+    const cy = args.anchorY + upY * args.step * i;
+    const x1 = cx - acX * args.halfWidth;
+    const y1 = cy - acY * args.halfWidth;
+    const x2 = cx + acX * args.halfWidth;
+    const y2 = cy + acY * args.halfWidth;
+    if (
+      Math.min(y1, y2) > args.clipMaxY ||
+      Math.max(y1, y2) < args.clipMinY
+    ) {
+      continue;
+    }
+    out.push({ x1, y1, x2, y2, center: i === 0 });
+  }
+  return out;
+}
+
+/** Project a point in SVG coordinates by a tilt angle (deg) and a length. */
+function rotatedPoint(
+  x: number,
+  y: number,
+  tiltDeg: number,
+  length: number
+): { x: number; y: number } {
+  const r = (tiltDeg * Math.PI) / 180;
+  return {
+    x: x + Math.sin(r) * length,
+    y: y - Math.cos(r) * length
+  };
 }

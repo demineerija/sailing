@@ -5,6 +5,8 @@ import {
   distanceToSegment,
   haversineDistance,
   initialBearing,
+  ladderLines,
+  laylines,
   midpoint,
   NEUTRAL_THRESHOLD_DEG,
   projectCoord,
@@ -198,6 +200,58 @@ describe('projectCoord', () => {
     const behind = projectCoord(PIN, 0, -5);
     expect(ahead.lat).toBeGreaterThan(PIN.lat);
     expect(behind.lat).toBeLessThan(PIN.lat);
+  });
+});
+
+describe('ladderLines', () => {
+  const ANCHOR = { lat: 43.7, lon: 7.27 };
+
+  it('returns N rungs centred on the anchor', () => {
+    const rungs = ladderLines(ANCHOR, 0, 50, 7);
+    expect(rungs.length).toBe(7);
+    expect(rungs[3].index).toBe(0);
+    expect(rungs[3].offsetMeters).toBe(0);
+  });
+
+  it('rungs are perpendicular to the wind', () => {
+    // wind from north: rungs should run east-west.
+    const rungs = ladderLines(ANCHOR, 0, 50, 5, 100);
+    const central = rungs[2]; // index 0 rung
+    const bearing = initialBearing(central.a, central.b);
+    expect(Math.min(Math.abs(bearing - 90), Math.abs(bearing - 270))).toBeLessThan(1);
+  });
+
+  it('positive index is upwind (toward the wind source)', () => {
+    const rungs = ladderLines(ANCHOR, 0, 100, 3); // wind from north
+    const upper = rungs.find((r) => r.index === 1)!;
+    const lower = rungs.find((r) => r.index === -1)!;
+    // upwind = toward TWD = north → upper rung must be more northerly
+    expect(upper.a.lat).toBeGreaterThan(lower.a.lat);
+  });
+});
+
+describe('laylines', () => {
+  const WINDWARD = { lat: 43.7, lon: 7.27 };
+
+  it('starboard layline goes down-right with wind from north', () => {
+    const ll = laylines(WINDWARD, 0, 45, 200);
+    // starboard layline bearing = downwind − 45° = 180 − 45 = 135 (SE)
+    const b = initialBearing(ll.starboard.from, ll.starboard.to);
+    expect(Math.abs(b - 135)).toBeLessThan(1);
+  });
+
+  it('port layline goes down-left with wind from north', () => {
+    const ll = laylines(WINDWARD, 0, 45, 200);
+    // port layline bearing = downwind + 45° = 180 + 45 = 225 (SW)
+    const b = initialBearing(ll.port.from, ll.port.to);
+    expect(Math.abs(b - 225)).toBeLessThan(1);
+  });
+
+  it('cone angle equals 2 × layline degrees', () => {
+    const ll = laylines(WINDWARD, 0, 40, 200);
+    const stb = initialBearing(ll.starboard.from, ll.starboard.to);
+    const port = initialBearing(ll.port.from, ll.port.to);
+    expect(Math.abs(port - stb)).toBeCloseTo(80, 1);
   });
 });
 

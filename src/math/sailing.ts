@@ -215,6 +215,103 @@ export function projectCoord(
   };
 }
 
+export type LadderLine = {
+  /** Stack index — 0 = the rung passing through the anchor (windward). */
+  index: number;
+  /** True distance along the upwind axis from the anchor (positive = above
+   *  windward, negative = below toward the start line). */
+  offsetMeters: number;
+  /** Two endpoints to draw on the map. */
+  a: GeoCoord;
+  b: GeoCoord;
+};
+
+/**
+ * Build a ladder of equal-step rungs perpendicular to the wind. Each rung is
+ * a fair-line: every boat sitting on the same rung is the same distance from
+ * the windward mark, regardless of which side of the course they are on. The
+ * rung with `index === 0` passes through the anchor (typically the windward
+ * mark), positive indices climb closer to the wind, negative ones drop back
+ * toward the line.
+ *
+ * @param anchor  the point the central rung passes through
+ * @param windDirection TWD (where wind is FROM), degrees true
+ * @param rungSpacingMeters distance between rungs (suggest 30–60 m)
+ * @param rungs   total rungs to emit (centred on the anchor; default 11)
+ * @param halfWidthMeters how far each rung extends to either side
+ */
+export function ladderLines(
+  anchor: GeoCoord,
+  windDirection: number,
+  rungSpacingMeters: number,
+  rungs = 11,
+  halfWidthMeters?: number
+): LadderLine[] {
+  const half = Math.floor(rungs / 2);
+  // The "upwind" direction (where you sail toward) is TWD itself, since the
+  // wind is coming FROM there.
+  const upwind = wrap360(windDirection);
+  const acrossWind = wrap360(windDirection + 90);
+  const width = halfWidthMeters ?? rungSpacingMeters * (rungs - 1);
+  const out: LadderLine[] = [];
+  for (let i = -half; i <= half; i++) {
+    const offset = i * rungSpacingMeters;
+    const centre = projectCoord(anchor, upwind, offset);
+    out.push({
+      index: i,
+      offsetMeters: offset,
+      a: projectCoord(centre, acrossWind, -width),
+      b: projectCoord(centre, acrossWind, width)
+    });
+  }
+  return out;
+}
+
+export type LayLines = {
+  /** Layline that approaches the windward mark on starboard tack — the
+   *  preferred final approach (right-of-way under rule 10). */
+  starboard: { from: GeoCoord; to: GeoCoord };
+  /** Layline that approaches the windward mark on port tack. */
+  port: { from: GeoCoord; to: GeoCoord };
+};
+
+/**
+ * Build the two laylines emanating downwind from the windward mark.
+ *
+ * - Boats inside the cone formed by the two laylines can fetch the windward
+ *   mark with one tack.
+ * - Boats outside need at least one extra tack.
+ *
+ * @param windward  the windward mark
+ * @param windDirection TWD (where wind is FROM), degrees true
+ * @param laylineDeg upwind angle off the wind, typically 40–50° (45° default)
+ * @param lengthMeters how far down to draw each layline
+ */
+export function laylines(
+  windward: GeoCoord,
+  windDirection: number,
+  laylineDeg: number,
+  lengthMeters: number
+): LayLines {
+  // Looking from the windward mark down toward the start, we walk along a
+  // bearing that is `(TWD + 180) ± laylineDeg`. The starboard-tack layline
+  // sits to the LEFT (port side) of the upwind axis (TWD); a boat on it is
+  // sailing away from the mark on starboard tack toward the bottom-left.
+  const downwind = wrap360(windDirection + 180);
+  const stbBearing = wrap360(downwind - laylineDeg);
+  const portBearing = wrap360(downwind + laylineDeg);
+  return {
+    starboard: {
+      from: windward,
+      to: projectCoord(windward, stbBearing, lengthMeters)
+    },
+    port: {
+      from: windward,
+      to: projectCoord(windward, portBearing, lengthMeters)
+    }
+  };
+}
+
 export type SanityWarning =
   | { type: 'lineTooShort'; meters: number }
   | { type: 'biasNearlyAlongLine'; degrees: number }
