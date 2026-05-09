@@ -56,6 +56,30 @@ export function SettingsView() {
           </Row>
         </Section>
 
+        <Section title="Ветер из интернета">
+          <Row label="Авто-обновление">
+            <select
+              className="bg-navy border border-white/10 rounded-xl p-2 text-lg"
+              value={settings.autoWindMinutes}
+              onChange={(e) =>
+                setSettings({
+                  autoWindMinutes: parseInt(e.target.value, 10) as 0 | 5 | 10 | 15 | 30
+                })
+              }
+            >
+              <option value={0}>Выключено</option>
+              <option value={5}>Каждые 5 мин</option>
+              <option value={10}>Каждые 10 мин</option>
+              <option value={15}>Каждые 15 мин</option>
+              <option value={30}>Каждые 30 мин</option>
+            </select>
+          </Row>
+          <div className="text-xs text-white/50 px-1">
+            Источник — Open-Meteo (бесплатно, без ключа). Каждое обновление
+            пишется в график сдвигов как «авто».
+          </div>
+        </Section>
+
         <Section title="Звук">
           <Row label="Сигналы таймера">
             <input

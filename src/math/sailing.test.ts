@@ -7,6 +7,7 @@ import {
   initialBearing,
   midpoint,
   NEUTRAL_THRESHOLD_DEG,
+  projectCoord,
   sanityWarnings,
   timeToBurnSeconds,
   wrap180,
@@ -172,6 +173,31 @@ describe('timeToBurnSeconds', () => {
   it('returns null for invalid inputs', () => {
     expect(timeToBurnSeconds(-1, 5)).toBeNull();
     expect(timeToBurnSeconds(Number.NaN, 5)).toBeNull();
+  });
+});
+
+describe('projectCoord', () => {
+  it('returns the same point for distance 0', () => {
+    const p = projectCoord(PIN, 90, 0);
+    expect(p.lat).toBeCloseTo(PIN.lat, 6);
+    expect(p.lon).toBeCloseTo(PIN.lon, 6);
+  });
+
+  it('moves ~10 m east when bearing is 90°', () => {
+    const east = projectCoord(PIN, 90, 10);
+    const d = haversineDistance(PIN, east);
+    expect(d).toBeGreaterThan(9.5);
+    expect(d).toBeLessThan(10.5);
+    // bearing back to PIN should be roughly 270°
+    const back = initialBearing(east, PIN);
+    expect(Math.abs(back - 270)).toBeLessThan(0.5);
+  });
+
+  it('negative distance projects the opposite way', () => {
+    const ahead = projectCoord(PIN, 0, 5);
+    const behind = projectCoord(PIN, 0, -5);
+    expect(ahead.lat).toBeGreaterThan(PIN.lat);
+    expect(behind.lat).toBeLessThan(PIN.lat);
   });
 });
 

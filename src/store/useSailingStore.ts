@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import { loadRoot, saveRoot, clearAll } from '../db/persistence';
+import {
+  loadRoot,
+  saveRoot,
+  clearAll,
+  saveAudio as saveAudioBlob,
+  deleteAudio as deleteAudioBlob,
+  clearAudio
+} from '../db/persistence';
 import type { GeoCoord } from '../math/sailing';
 import type { LiveGps } from '../services/geolocation';
 
@@ -10,7 +17,35 @@ export type GeoPoint = GeoCoord & { ts: number; accuracy?: number };
 export type WindReading = {
   ts: number;
   direction: number;
-  source: 'manual' | 'heading' | 'slider';
+  speedMps?: number;
+  source: 'manual' | 'heading' | 'slider' | 'internet' | 'auto';
+};
+
+/** Voice memo recorded by the coach. The audio Blob lives in a separate
+ *  IndexedDB store keyed by `audioId` to keep the main state JSON small. */
+export type VoiceNote = {
+  id: string;
+  audioId: string;
+  ts: number;
+  durationMs: number;
+  mimeType: string;
+  lat: number | null;
+  lon: number | null;
+  label?: string;
+};
+
+/** Result of a current-drift measurement: where the boat drifted while the
+ *  engine was off, and how fast. setDirection is the direction the current
+ *  is flowing TOWARD (0=N), opposite of TWD's "from" convention. */
+export type CurrentVector = {
+  setDirection: number;
+  speedMps: number;
+  distanceMeters: number;
+  durationMs: number;
+  samples: number;
+  startCoord: GeoCoord;
+  endCoord: GeoCoord;
+  measuredAt: number;
 };
 
 export type Course = {
@@ -23,6 +58,8 @@ export type Course = {
   windSetAt: number | null;
   windHistory: WindReading[];
   notes: string;
+  voiceNotes: VoiceNote[];
+  current: CurrentVector | null;
 };
 
 export type Regatta = {
@@ -39,11 +76,24 @@ export type Settings = {
   holdMs: 1500 | 2500 | 4000;
   sound: boolean;
   layLineDeg: number; // 40..50
+  /** Auto-refresh wind from Open-Meteo every N minutes. 0 disables. */
+  autoWindMinutes: 0 | 5 | 10 | 15 | 30;
+  /** Default offset (in metres) for "Ping at Distance". Negative = behind. */
+  pingAtDistanceMeters: number;
 };
 
 export type ViewMode = 'schema' | 'map';
 
-export type DrawerKind = 'setup' | 'history' | 'wind' | 'settings' | 'timer' | null;
+export type DrawerKind =
+  | 'setup'
+  | 'history'
+  | 'wind'
+  | 'settings'
+  | 'timer'
+  | 'voice'
+  | 'drift'
+  | 'pingDist'
+  | null;
 
 export type PersistedRoot = {
   regattas: Record<string, Regatta>;
@@ -69,9 +119,19 @@ type Actions = {
   ensureCurrentCourse: () => Course;
   newRace: () => void;
   pingMark: (mark: MarkKey, coord: GeoCoord, accuracy?: number) => void;
-  setWind: (direction: number, source: WindReading['source']) => void;
+  setWind: (direction: number, source: WindReading['source'], speedMps?: number) => void;
   setNotes: (notes: string) => void;
   setCourseName: (name: string) => void;
+  // voice notes
+  addVoiceNote: (
+    blob: Blob,
+    durationMs: number,
+    coord: GeoCoord | null,
+    label?: string
+  ) => Promise<VoiceNote>;
+  removeVoiceNote: (noteId: string) => Promise<void>;
+  // current
+  setCurrent: (vector: CurrentVector | null) => void;
   // live
   updateLiveGps: (g: LiveGps | null) => void;
   // ui
@@ -87,7 +147,9 @@ const DEFAULT_SETTINGS: Settings = {
   headingMode: 'true',
   holdMs: 2500,
   sound: true,
-  layLineDeg: 45
+  layLineDeg: 45,
+  autoWindMinutes: 0,
+  pingAtDistanceMeters: 5
 };
 
 const EMPTY: PersistedRoot = {
@@ -120,7 +182,18 @@ function newCourse(name = 'Гонка 1'): Course {
     windDirection: null,
     windSetAt: null,
     windHistory: [],
-    notes: ''
+    notes: '',
+    voiceNotes: [],
+    current: null
+  };
+}
+
+function ensureCourseShape(c: Course): Course {
+  // Migration helper for older persisted courses missing the new arrays.
+  return {
+    ...c,
+    voiceNotes: Array.isArray(c.voiceNotes) ? c.voiceNotes : [],
+    current: c.current ?? null
   };
 }
 
@@ -150,8 +223,13 @@ export const useSailingStore = create<State & Actions>((set, get) => ({
   hydrate: async () => {
     const data = await loadRoot();
     if (data) {
+      const courses: Record<string, Course> = {};
+      for (const [id, c] of Object.entries(data.courses)) {
+        courses[id] = ensureCourseShape(c);
+      }
       set({
         ...data,
+        courses,
         settings: { ...DEFAULT_SETTINGS, ...data.settings }
       });
     }
@@ -206,6 +284,7 @@ export const useSailingStore = create<State & Actions>((set, get) => ({
       c.windward = prev.windward;
       c.windDirection = prev.windDirection;
       c.windSetAt = prev.windSetAt;
+      c.current = prev.current;
     }
     set({
       courses: { ...s.courses, [c.id]: c },
@@ -227,9 +306,14 @@ export const useSailingStore = create<State & Actions>((set, get) => ({
     scheduleSave(get);
   },
 
-  setWind: (direction, source) => {
+  setWind: (direction, source, speedMps) => {
     const cur = get().ensureCurrentCourse();
-    const reading: WindReading = { ts: Date.now(), direction, source };
+    const reading: WindReading = {
+      ts: Date.now(),
+      direction,
+      source,
+      ...(speedMps !== undefined ? { speedMps } : {})
+    };
     const updated: Course = {
       ...cur,
       windDirection: direction,
@@ -237,6 +321,54 @@ export const useSailingStore = create<State & Actions>((set, get) => ({
       windHistory: [...cur.windHistory.slice(-499), reading]
     };
     set({ courses: { ...get().courses, [cur.id]: updated } });
+    scheduleSave(get);
+  },
+
+  addVoiceNote: async (blob, durationMs, coord, label) => {
+    const cur = get().ensureCurrentCourse();
+    const id = uid();
+    const audioId = `audio_${id}`;
+    await saveAudioBlob(audioId, blob);
+    const note: VoiceNote = {
+      id,
+      audioId,
+      ts: Date.now(),
+      durationMs,
+      mimeType: blob.type || 'audio/webm',
+      lat: coord?.lat ?? null,
+      lon: coord?.lon ?? null,
+      ...(label ? { label } : {})
+    };
+    const updated: Course = {
+      ...cur,
+      voiceNotes: [...cur.voiceNotes, note]
+    };
+    set({ courses: { ...get().courses, [cur.id]: updated } });
+    scheduleSave(get);
+    return note;
+  },
+
+  removeVoiceNote: async (noteId) => {
+    const s = get();
+    const cur = s.currentCourseId ? s.courses[s.currentCourseId] : null;
+    if (!cur) return;
+    const note = cur.voiceNotes.find((n) => n.id === noteId);
+    if (note) {
+      await deleteAudioBlob(note.audioId);
+    }
+    const updated: Course = {
+      ...cur,
+      voiceNotes: cur.voiceNotes.filter((n) => n.id !== noteId)
+    };
+    set({ courses: { ...s.courses, [cur.id]: updated } });
+    scheduleSave(get);
+  },
+
+  setCurrent: (vector) => {
+    const cur = get().ensureCurrentCourse();
+    set({
+      courses: { ...get().courses, [cur.id]: { ...cur, current: vector } }
+    });
     scheduleSave(get);
   },
 
@@ -268,6 +400,7 @@ export const useSailingStore = create<State & Actions>((set, get) => ({
 
   resetAll: async () => {
     await clearAll();
+    await clearAudio();
     set({ ...EMPTY, liveGps: null, drawerOpen: null });
   }
 }));

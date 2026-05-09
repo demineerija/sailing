@@ -145,15 +145,39 @@ export function LiveDashboard() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 px-2 pb-2 shrink-0">
+      <div className="grid grid-cols-3 gap-1.5 px-2 shrink-0">
         <button
-          className="min-h-[48px] rounded-2xl bg-white/10 text-base font-bold"
+          className="min-h-[44px] rounded-xl bg-pinRed/90 text-sm font-bold flex items-center justify-center gap-1"
+          onClick={() => setDrawer('voice')}
+          title="Голосовая метка"
+        >
+          🎤 Голос
+        </button>
+        <button
+          className="min-h-[44px] rounded-xl bg-windYellow text-navy text-sm font-bold flex items-center justify-center gap-1"
+          onClick={() => setDrawer('drift')}
+          title="Замер течения"
+        >
+          ⛵ Течение
+        </button>
+        <button
+          className="min-h-[44px] rounded-xl bg-windwardBlue/90 text-white text-sm font-bold flex items-center justify-center gap-1"
+          onClick={() => setDrawer('pingDist')}
+          title="Поставить точку на расстоянии"
+        >
+          📍 На расст.
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-1.5 px-2 pt-1.5 pb-2 shrink-0">
+        <button
+          className="min-h-[44px] rounded-2xl bg-white/10 text-base font-bold"
           onClick={() => setDrawer('setup')}
         >
           Постановка
         </button>
         <button
-          className="min-h-[48px] rounded-2xl bg-windwardBlue text-base font-bold"
+          className="min-h-[44px] rounded-2xl bg-windwardBlue text-base font-bold"
           onClick={() => newRace()}
         >
           + Новая гонка

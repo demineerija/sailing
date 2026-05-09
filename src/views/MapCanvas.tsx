@@ -1,9 +1,9 @@
 import { useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Course } from '../store/useSailingStore';
 import type { LiveGps } from '../services/geolocation';
-import { midpoint } from '../math/sailing';
+import { midpoint, projectCoord } from '../math/sailing';
 
 function FitBounds({ course, live }: { course: Course; live: LiveGps | null }) {
   const map = useMap();
@@ -85,6 +85,44 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
           radius={8}
           pathOptions={{ color: '#fff', weight: 2, fillColor: '#FBBF24', fillOpacity: 1 }}
         />
+      )}
+
+      {/* Current vector — drawn from the measurement origin in the direction
+          the current is flowing. Length is scaled visually so even a tiny
+          drift is visible on screen. */}
+      {course.current && course.current.speedMps > 0.05 && (() => {
+        const c = course.current;
+        const arrowLen = Math.max(15, c.speedMps * 60); // ~1 knot ≈ 31 m on map
+        const tip = projectCoord(c.startCoord, c.setDirection, arrowLen);
+        return (
+          <Polyline
+            positions={[
+              [c.startCoord.lat, c.startCoord.lon],
+              [tip.lat, tip.lon]
+            ]}
+            pathOptions={{ color: '#22d3ee', weight: 4, opacity: 0.9, dashArray: '6 6' }}
+          >
+            <Tooltip permanent direction="top" offset={[0, -4]}>
+              течение {Math.round(c.setDirection)}° · {(c.speedMps * 1.94384).toFixed(2)} уз
+            </Tooltip>
+          </Polyline>
+        );
+      })()}
+
+      {/* Voice notes — purple circles with a tooltip for the recorded time. */}
+      {course.voiceNotes.map((n) =>
+        n.lat !== null && n.lon !== null ? (
+          <CircleMarker
+            key={n.id}
+            center={[n.lat, n.lon]}
+            radius={7}
+            pathOptions={{ color: '#fff', weight: 2, fillColor: '#a855f7', fillOpacity: 0.95 }}
+          >
+            <Tooltip direction="top" offset={[0, -4]}>
+              🎤 {new Date(n.ts).toLocaleTimeString('ru-RU')}
+            </Tooltip>
+          </CircleMarker>
+        ) : null
       )}
     </MapContainer>
   );

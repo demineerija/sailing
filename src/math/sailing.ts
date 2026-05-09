@@ -190,6 +190,31 @@ export function timeToBurnSeconds(
   return distanceMeters / speedMps;
 }
 
+/**
+ * Project a point a given distance along a true bearing, assuming a flat
+ * earth — accurate to <1 cm for the small distances ("ping at distance" is
+ * normally 5–20 m) we care about.
+ *
+ * @param from  starting coordinate
+ * @param bearingDeg true bearing in degrees (0=N, 90=E)
+ * @param distanceMeters distance ahead in metres (negative = behind)
+ */
+export function projectCoord(
+  from: GeoCoord,
+  bearingDeg: number,
+  distanceMeters: number
+): GeoCoord {
+  const meanLatRad = deg2rad(from.lat);
+  const mPerDegLat = 111_320;
+  const mPerDegLon = 111_320 * Math.cos(meanLatRad);
+  const east = distanceMeters * Math.sin(deg2rad(bearingDeg));
+  const north = distanceMeters * Math.cos(deg2rad(bearingDeg));
+  return {
+    lat: from.lat + north / mPerDegLat,
+    lon: from.lon + east / mPerDegLon
+  };
+}
+
 export type SanityWarning =
   | { type: 'lineTooShort'; meters: number }
   | { type: 'biasNearlyAlongLine'; degrees: number }

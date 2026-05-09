@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { selectCurrentCourse, useSailingStore } from './store/useSailingStore';
 import * as geolocation from './services/geolocation';
+import { startAutoWind, type AutoWindHandle } from './services/windAuto';
 import { Onboarding } from './views/Onboarding';
 import { EmptyLive } from './views/EmptyLive';
 import { LiveDashboard } from './views/LiveDashboard';
@@ -9,12 +10,19 @@ import { HistoryDrawer } from './views/HistoryDrawer';
 import { SettingsView } from './views/SettingsView';
 import { WindChart } from './views/WindChart';
 import { TimerFullscreen } from './views/TimerView';
+import { VoiceNotesDrawer } from './views/VoiceNotesDrawer';
+import { DriftDrawer } from './views/DriftDrawer';
+import { PingAtDistanceDrawer } from './views/PingAtDistanceDrawer';
 
 export function App() {
   const hasOnboarded = useSailingStore((s) => s.hasOnboarded);
   const hydrate = useSailingStore((s) => s.hydrate);
   const updateLiveGps = useSailingStore((s) => s.updateLiveGps);
   const course = useSailingStore(selectCurrentCourse);
+  const autoWindMin = useSailingStore((s) => s.settings.autoWindMinutes);
+  const setWind = useSailingStore((s) => s.setWind);
+
+  const autoWindRef = useRef<AutoWindHandle | null>(null);
 
   useEffect(() => {
     void hydrate();
@@ -30,6 +38,33 @@ export function App() {
     };
   }, [hasOnboarded, updateLiveGps]);
 
+  useEffect(() => {
+    if (!hasOnboarded) return;
+    if (autoWindRef.current) {
+      autoWindRef.current.stop();
+      autoWindRef.current = null;
+    }
+    if (autoWindMin > 0) {
+      autoWindRef.current = startAutoWind({
+        getCoord: () => {
+          const s = useSailingStore.getState();
+          const live = s.liveGps?.coord ?? null;
+          if (live) return live;
+          const c = s.currentCourseId ? s.courses[s.currentCourseId] : null;
+          return c?.pin ?? c?.committee ?? c?.windward ?? null;
+        },
+        getIntervalMinutes: () => useSailingStore.getState().settings.autoWindMinutes,
+        setWind: (direction, source, speedMps) => setWind(direction, source, speedMps)
+      });
+    }
+    return () => {
+      if (autoWindRef.current) {
+        autoWindRef.current.stop();
+        autoWindRef.current = null;
+      }
+    };
+  }, [hasOnboarded, autoWindMin, setWind]);
+
   if (!hasOnboarded) {
     return <Onboarding />;
   }
@@ -44,6 +79,9 @@ export function App() {
       <SettingsView />
       <WindChart />
       <TimerFullscreen />
+      <VoiceNotesDrawer />
+      <DriftDrawer />
+      <PingAtDistanceDrawer />
     </div>
   );
 }
