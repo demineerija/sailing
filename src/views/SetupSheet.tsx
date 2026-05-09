@@ -3,6 +3,8 @@ import { useSailingStore, selectCurrentCourse } from '../store/useSailingStore';
 import { PingButton } from './PingButton';
 import * as orientation from '../services/orientation';
 import { fetchCurrentWind, WindApiError } from '../services/windApi';
+import { compassHeadingToTwd } from '../services/windFromCompass';
+import { wrap360 } from '../math/sailing';
 
 const COMPASS_CAPTURE_MS = 1500;
 
@@ -75,9 +77,11 @@ export function SetupSheet() {
           return;
         }
         const final = circularMean(samples);
-        const corrected = (final + windAdjust + 360) % 360;
         setHeadingNow(final);
-        setWind(corrected, 'heading');
+        const twd = wrap360(
+          compassHeadingToTwd(final, settings.windCompassFlip180) + windAdjust
+        );
+        setWind(twd, 'heading');
       }
     };
     requestAnimationFrame(tick);
@@ -193,6 +197,12 @@ export function SetupSheet() {
 
         <div className="mt-6 p-3 bg-navy rounded-2xl">
           <div className="text-lg font-semibold mb-2">Ветер</div>
+          <div className="text-xs text-white/60 mb-2 leading-snug">
+            Наведи <b>верх экрана</b> телефона в сторону, <b>откуда дует</b> ветер
+            (как будто нос катера в ветер). Цифра TWD = откуда; жёлтая стрелка на
+            карте показывает <b>куда</b> ветер дует — это нормально: отличается на
+            180°. Если показания зеркальные — включи «+180°» в настройках.
+          </div>
           <button
             type="button"
             className="relative w-full min-h-[64px] rounded-2xl bg-windYellow text-navy text-base sm:text-lg font-bold active:opacity-80 mb-2 overflow-hidden"

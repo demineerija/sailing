@@ -12,16 +12,19 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet-rotate/dist/leaflet-rotate.js';
 import { loadAudio } from '../db/persistence';
 import { useSailingStore, type Course, type VoiceNote } from '../store/useSailingStore';
 import * as orientation from '../services/orientation';
 import type { LiveGps } from '../services/geolocation';
 import {
   haversineDistance,
+  initialBearing,
   ladderLines,
   laylines,
   midpoint,
-  projectCoord
+  projectCoord,
+  wrap360
 } from '../math/sailing';
 
 /**
@@ -77,9 +80,10 @@ function FitBounds({
   return null;
 }
 
+/** Screen-relative heading: geographic minus current map bearing (leaflet-rotate). */
 function boatIcon(headingDeg: number): L.DivIcon {
-  // Yellow boat-shaped triangle, pointed at the heading. Rotation is applied
-  // via inline CSS so we don't need an extra Leaflet plugin.
+  // Yellow boat-shaped triangle. `headingDeg` is already relative to the
+  // rotated map so the bow points the right way on screen.
   const html = `<div style="transform: rotate(${headingDeg}deg); width: 28px; height: 28px;">
     <svg viewBox="-12 -12 24 24" width="28" height="28">
       <circle cx="0" cy="0" r="11" fill="#06101C" stroke="#fff" stroke-width="1.5" opacity="0.8"/>
@@ -92,6 +96,16 @@ function boatIcon(headingDeg: number): L.DivIcon {
     iconSize: [28, 28],
     iconAnchor: [14, 14]
   });
+}
+
+function MapBearingSync({ bearingDeg }: { bearingDeg: number }) {
+  const map = useMap();
+  useEffect(() => {
+    const m = map as L.Map;
+    if (!m.options.rotate) return;
+    m.setBearing(bearingDeg);
+  }, [map, bearingDeg]);
+  return null;
 }
 
 function VoiceNoteMapMarker({ note }: { note: VoiceNote }) {
@@ -191,14 +205,51 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Anchor for the ladder = windward mark when present, otherwise the line
-  // midpoint. The ladder always tracks the wind, so it works the moment we
-  // know TWD, even before the windward mark is set.
+  // Anchor for ladder lines: any course point or live GPS so «ступеньки» show
+  // whenever TWD is known (not only after both line ends are set).
   const ladderAnchor = useMemo(() => {
     if (course.windward) return course.windward;
     if (course.pin && course.committee) return midpoint(course.pin, course.committee);
+    if (course.pin) return course.pin;
+    if (course.committee) return course.committee;
+    if (live) return live.coord;
     return null;
-  }, [course.pin, course.committee, course.windward]);
+  }, [
+    course.pin,
+    course.committee,
+    course.windward,
+    live?.coord.lat,
+    live?.coord.lon
+  ]);
+
+  /** Rotate map: ВЕРХ (windward) строго вверх экрана; без верхнего — наветер по TWD. */
+  const mapBearingDeg = useMemo(() => {
+    if (course.windward) {
+      if (course.pin && course.committee) {
+        return initialBearing(
+          midpoint(course.pin, course.committee),
+          course.windward
+        );
+      }
+      if (course.windDirection !== null) {
+        const below = projectCoord(
+          course.windward,
+          course.windDirection + 180,
+          250
+        );
+        return initialBearing(below, course.windward);
+      }
+      return 0;
+    }
+    if (course.windDirection !== null) return course.windDirection;
+    return 0;
+  }, [course.windward, course.pin, course.committee, course.windDirection]);
+
+  const phoneHeadingForPanel = compassHeading ?? live?.headingTrue ?? null;
+  const speedKmh =
+    live && live.speedMps != null && live.speedMps >= 0
+      ? (live.speedMps * 3.6).toFixed(1)
+      : '—';
 
   // Approximate length scale — used to size the ladder rungs and laylines so
   // they always look right regardless of course size.
@@ -221,7 +272,13 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
     const step = Math.max(20, Math.round(courseScale * 0.18));
     const rungs = 11;
     const halfWidth = Math.max(courseScale * 0.7, step * 4);
-    return ladderLines(ladderAnchor, course.windDirection, step, rungs, halfWidth);
+    return ladderLines(
+      ladderAnchor,
+      course.windDirection,
+      step,
+      rungs,
+      halfWidth
+    );
   }, [course.windDirection, ladderAnchor, courseScale]);
 
   const layLines = useMemo(() => {
@@ -237,7 +294,14 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
         zoom={15}
         className="w-full h-full rounded-2xl overflow-hidden"
         attributionControl={false}
+        rotate
+        bearing={mapBearingDeg}
+        rotateControl={false}
+        compassBearing={false}
+        touchRotate={false}
+        shiftKeyRotate={false}
       >
+        <MapBearingSync bearingDeg={mapBearingDeg} />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
@@ -264,9 +328,9 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
               ]}
               pathOptions={{
                 color: isCenter ? '#FBBF24' : '#FFFFFF',
-                weight: isCenter ? 2 : 1,
-                opacity: isCenter ? 0.65 : 0.18,
-                dashArray: isCenter ? undefined : '4 6',
+                weight: isCenter ? 2.5 : 2,
+                opacity: isCenter ? 0.75 : 0.42,
+                dashArray: isCenter ? undefined : '5 6',
                 interactive: false
               }}
             />
@@ -389,14 +453,13 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
                 ⚓ Вы (GPS ±{Math.round(live.accuracy)}м)
               </Tooltip>
             </CircleMarker>
-            {boatHeading !== null && (
+            {boatHeading !== null ? (
               <Marker
-                key={`hdg-${Math.round(boatHeading / 3) * 3}`}
                 position={[live.coord.lat, live.coord.lon]}
-                icon={boatIcon(boatHeading)}
+                icon={boatIcon(wrap360(boatHeading - mapBearingDeg))}
                 zIndexOffset={700}
               />
-            )}
+            ) : null}
           </>
         )}
 
@@ -450,7 +513,7 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
                 interactive={false}
               >
                 <Tooltip permanent direction="center" className="wind-label">
-                  🌬 {Math.round(course.windDirection)}°
+                  🌬 откуда {Math.round(course.windDirection)}° (куда дует — по стрелке)
                 </Tooltip>
               </CircleMarker>
             </>
@@ -484,7 +547,11 @@ export function MapCanvas({ course, live }: { course: Course; live: LiveGps | nu
         ))}
       </MapContainer>
 
-      <WindRose direction={course.windDirection} />
+      <MapCompassPanel
+        twd={course.windDirection}
+        phoneHeadingDeg={phoneHeadingForPanel}
+        speedKmh={speedKmh}
+      />
       <MapLegend hasLayline={!!layLines} hasLadder={!!ladders} />
 
       {live ? (
@@ -525,31 +592,15 @@ function BoatHud({
   headingDeg: number | null;
   onRequestCompass: () => void;
 }) {
-  const knots =
-    live.speedMps != null && live.speedMps >= 0
-      ? (live.speedMps * 1.94384).toFixed(1)
-      : '—';
-  const hdg = headingDeg !== null ? `${Math.round(headingDeg)}°` : '—';
-  const src =
-    headingDeg !== null
-      ? compassVsGpsHint(live.headingTrue, headingDeg)
-      : null;
-
   return (
     <div
       className="absolute top-2 left-2 rounded-xl bg-navyDeep/92 border border-white/20 px-2.5 py-2 shadow-lg pointer-events-none"
       style={{ zIndex: 450 }}
     >
-      <div className="text-[10px] uppercase tracking-wide text-white/50">Катер</div>
-      <div className="text-windYellow text-lg font-black tabular-nums leading-none">
-        {knots} <span className="text-xs font-bold text-white/70">уз</span>
+      <div className="text-[10px] uppercase tracking-wide text-white/50">точность GPS</div>
+      <div className="text-windYellow text-base font-black tabular-nums leading-none">
+        ±{Math.round(live.accuracy)} м
       </div>
-      <div className="text-sm font-bold tabular-nums mt-0.5">
-        курс {hdg}
-      </div>
-      {src ? (
-        <div className="text-[9px] text-white/45 mt-0.5">{src}</div>
-      ) : null}
       {headingDeg === null ? (
         <button
           type="button"
@@ -559,43 +610,82 @@ function BoatHud({
           🧭 Разрешить компас
         </button>
       ) : null}
+      <div className="text-[9px] text-white/40 mt-1 leading-tight">
+        Курс и км/ч — справа вверху
+      </div>
     </div>
   );
 }
 
-function compassVsGpsHint(
-  gpsHdg: number | null,
-  shown: number
-): string | null {
-  if (gpsHdg === null) return 'компас';
-  const d = Math.abs((((gpsHdg - shown + 540) % 360) - 180));
-  if (d < 12) return 'GPS+компас';
-  return 'компас (GPS курс часто пустой на месте)';
-}
-
-function WindRose({ direction }: { direction: number | null }) {
-  if (direction === null) return null;
-  // The arrow points in the direction the wind is blowing TOWARD (downwind).
-  // The boat is pushed in that direction.
-  const arrowRot = (direction + 180) % 360;
+function MapCompassPanel({
+  twd,
+  phoneHeadingDeg,
+  speedKmh
+}: {
+  twd: number | null;
+  phoneHeadingDeg: number | null;
+  speedKmh: string;
+}) {
+  const h = phoneHeadingDeg;
   return (
     <div
-      className="absolute top-2 right-2 w-20 h-20 rounded-2xl bg-navyDeep/90 border border-white/25 flex flex-col items-center justify-center pointer-events-none"
-      style={{ zIndex: 410 }}
-      title={`ветер откуда: ${Math.round(direction)}°`}
+      className="absolute top-2 right-2 flex flex-col items-center rounded-2xl bg-navyDeep/92 border border-white/20 px-2.5 py-2 shadow-lg pointer-events-none min-w-[5.5rem]"
+      style={{ zIndex: 450 }}
     >
-      <div className="text-[9px] absolute top-1 left-0 right-0 text-center text-white/50">
-        N ↑
+      <div className="relative w-14 h-14 shrink-0">
+        <svg viewBox="0 0 56 56" className="w-14 h-14" aria-hidden>
+          <circle
+            cx="28"
+            cy="28"
+            r="26"
+            fill="none"
+            stroke="rgba(255,255,255,0.35)"
+            strokeWidth="1.5"
+          />
+          <text
+            x="28"
+            y="11"
+            textAnchor="middle"
+            fill="rgba(255,255,255,0.9)"
+            fontSize="9"
+            fontWeight="bold"
+          >
+            N
+          </text>
+          <text x="47" y="31" textAnchor="middle" fill="rgba(255,255,255,0.65)" fontSize="8">
+            В
+          </text>
+          <text x="28" y="50" textAnchor="middle" fill="rgba(255,255,255,0.65)" fontSize="8">
+            Ю
+          </text>
+          <text x="9" y="31" textAnchor="middle" fill="rgba(255,255,255,0.65)" fontSize="8">
+            З
+          </text>
+          {h !== null ? (
+            <g transform={`rotate(${h} 28 28)`}>
+              <polygon
+                points="28,8 23,28 33,28"
+                fill="#FBBF24"
+                stroke="#fff"
+                strokeWidth="1"
+              />
+            </g>
+          ) : null}
+        </svg>
       </div>
-      <div className="text-[9px] absolute top-1 left-1 text-white/40">откуда</div>
-      <div
-        className="text-windYellow text-3xl leading-none"
-        style={{ transform: `rotate(${arrowRot}deg)`, transformOrigin: 'center' }}
-      >
-        ➤
+      {twd !== null ? (
+        <div className="text-[9px] text-windYellow font-extrabold tabular-nums leading-tight text-center mt-0.5">
+          ветер {Math.round(twd)}° откуда
+        </div>
+      ) : (
+        <div className="text-[9px] text-white/45 text-center mt-0.5">ветер не задан</div>
+      )}
+      <div className="text-[11px] font-bold text-white tabular-nums mt-1">
+        тел. {h !== null ? `${Math.round(h)}°` : '—'}
       </div>
-      <div className="text-[10px] text-windYellow font-extrabold mt-0.5 tabular-nums">
-        🌬 {Math.round(direction)}°
+      <div className="text-sm font-black text-cyan-300 tabular-nums mt-0.5">
+        {speedKmh}{' '}
+        <span className="text-[10px] font-bold text-white/70">км/ч</span>
       </div>
     </div>
   );

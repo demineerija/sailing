@@ -135,13 +135,23 @@ export function LiveDashboard() {
         </button>
         <button
           type="button"
-          className="min-h-[64px] rounded-2xl bg-navyDeep flex flex-col items-center justify-center active:opacity-80"
+          className="min-h-[64px] rounded-2xl bg-navyDeep flex flex-col items-center justify-center active:opacity-80 px-1"
           onClick={() => setDrawer('history')}
         >
-          <div className="text-base font-bold tabular-nums leading-tight">
-            {calc?.distLine !== null && calc?.distLine !== undefined ? `${Math.round(calc.distLine)}м` : '—'}
-            {calc?.ttb !== null && calc?.ttb !== undefined ? ` · ${Math.round(calc.ttb)}с` : ''}
+          <div className="text-base font-bold tabular-nums leading-tight text-center">
+            {calc?.distLine !== null && calc?.distLine !== undefined
+              ? `${Math.round(calc.distLine)} м`
+              : '—'}
           </div>
+          {calc?.ttb !== null && calc?.ttb !== undefined ? (
+            <div className="text-xs text-windYellow font-bold mt-0.5">
+              ≈ {formatEtaSeconds(calc.ttb)}
+            </div>
+          ) : hasLine && calc?.distLine != null ? (
+            <div className="text-[9px] text-white/45 mt-0.5 text-center leading-tight">
+              время при скорости GPS &gt;0,5 м/с
+            </div>
+          ) : null}
           <div className="text-[10px] text-white/60 mt-0.5">до линии</div>
         </button>
       </div>
@@ -186,6 +196,19 @@ export function LiveDashboard() {
       </div>
     </div>
   );
+}
+
+function formatEtaSeconds(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return '—';
+  if (sec < 120) return `${Math.round(sec)} с`;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return mm > 0 ? `${h} ч ${mm} мин` : `${h} ч`;
+  }
+  return s > 0 ? `${m} мин ${s} с` : `${m} мин`;
 }
 
 function NoLineCta() {

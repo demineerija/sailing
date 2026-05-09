@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useSailingStore, selectCurrentCourse } from '../store/useSailingStore';
 import * as orientation from '../services/orientation';
 import { fetchCurrentWind, WindApiError } from '../services/windApi';
+import { compassHeadingToTwd } from '../services/windFromCompass';
+import { wrap360 } from '../math/sailing';
 
 const COMPASS_CAPTURE_MS = 1500;
 
@@ -16,6 +18,7 @@ export function WindDrawer() {
   const course = useSailingStore(selectCurrentCourse);
   const setWind = useSailingStore((s) => s.setWind);
   const liveGps = useSailingStore((s) => s.liveGps);
+  const windCompassFlip180 = useSailingStore((s) => s.settings.windCompassFlip180);
 
   const [windAdjust, setWindAdjust] = useState(0);
   const [headingNow, setHeadingNow] = useState<number | null>(null);
@@ -71,9 +74,11 @@ export function WindDrawer() {
           return;
         }
         const final = circularMean(samples);
-        const corrected = (final + windAdjust + 360) % 360;
         setHeadingNow(final);
-        setWind(corrected, 'heading');
+        const twd = wrap360(
+          compassHeadingToTwd(final, windCompassFlip180) + windAdjust
+        );
+        setWind(twd, 'heading');
       }
     };
     requestAnimationFrame(tick);
@@ -139,9 +144,9 @@ export function WindDrawer() {
         </div>
 
         <div className="text-sm text-white/70 mb-3 leading-snug">
-          Наведи нос катера ровно на ветер и нажми «Указать компасом».
-          Программа усреднит компас за 1.5 секунды и запишет направление
-          откуда дует ветер (TWD).
+          Наведи <b>верх экрана</b> в сторону, <b>откуда дует</b> ветер. Стрелка
+          на карте «куда дует» отличается на 180° — это правильно. Если зеркалит
+          — в настройках включи «Компас ветра +180°».
         </div>
 
         {course?.windDirection !== null && course?.windDirection !== undefined ? (

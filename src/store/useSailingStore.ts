@@ -80,6 +80,11 @@ export type Settings = {
   autoWindMinutes: 0 | 5 | 10 | 15 | 30;
   /** Default offset (in metres) for "Ping at Distance". Negative = behind. */
   pingAtDistanceMeters: number;
+  /**
+   * If true, compass-based TWD is inverted by 180° (use when the top edge of
+   * the phone points **down**-wind but you still want TWD = where wind comes from).
+   */
+  windCompassFlip180: boolean;
 };
 
 export type ViewMode = 'schema' | 'map';
@@ -152,7 +157,8 @@ const DEFAULT_SETTINGS: Settings = {
   sound: true,
   layLineDeg: 45,
   autoWindMinutes: 0,
-  pingAtDistanceMeters: 5
+  pingAtDistanceMeters: 5,
+  windCompassFlip180: false
 };
 
 const EMPTY: PersistedRoot = {

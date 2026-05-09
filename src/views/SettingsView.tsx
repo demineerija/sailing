@@ -86,6 +86,18 @@ export function SettingsView() {
               своей позиции.
             </div>
           </div>
+          <Row label="Компас ветра +180°">
+            <input
+              type="checkbox"
+              className="w-7 h-7"
+              checked={settings.windCompassFlip180}
+              onChange={(e) => setSettings({ windCompassFlip180: e.target.checked })}
+            />
+          </Row>
+          <div className="text-xs text-white/50 px-1 -mt-1 mb-1">
+            Если держишь телефон «наоборот» (верх вниз-ветер), включи — TWD
+            станет как с правильно ориентированным экраном.
+          </div>
         </Section>
 
         <Section title="Ветер из интернета">
