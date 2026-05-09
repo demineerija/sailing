@@ -16,7 +16,7 @@ export const sizes = {
 } as const;
 
 export const ru = {
-  appName: 'Старт',
+  appName: 'Sailing',
   pin: 'PIN',
   committee: 'СУДЬЯ',
   windward: 'ВЕРХ',

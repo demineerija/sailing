@@ -82,7 +82,7 @@ export function SettingsView() {
         </Section>
 
         <div className="text-sm text-white/50 mt-6">
-          Старт v1 · PWA для тренера парусного спорта.
+          Sailing v1 · PWA для тренера парусного спорта.
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-# Sailing Coach «Старт» — план PWA
+# Sailing Coach «Sailing» — план PWA
 
 > Адаптация плана iOS/SwiftUI-приложения. Парусная логика, дизайн и сценарии полностью сохранены, заменены только платформенные детали (SwiftUI → React, MapKit → Leaflet, CoreLocation → Geolocation API, AVFoundation → Web Audio, AppStorage/SwiftData → Zustand + IndexedDB).
 
@@ -102,7 +102,7 @@ type Settings = {
 
 Полноэкранный экран:
 
-- Иконка ⛵ + название «Старт».
+- Иконка ⛵ + название «Sailing».
 - Текст: «Программа использует GPS, чтобы запоминать положение знаков. Без доступа к геолокации основные функции работать не будут».
 - Большая кнопка «Разрешить» → `getCurrentPosition()` для триггера разрешения.
 

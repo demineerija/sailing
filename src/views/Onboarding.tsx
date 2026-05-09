@@ -24,7 +24,7 @@ export function Onboarding() {
   return (
     <div className="min-h-full flex flex-col items-center justify-center p-6 safe-top safe-bottom gap-6 text-center">
       <div className="text-7xl">⛵</div>
-      <h1 className="text-5xl font-extrabold tracking-tight">Старт</h1>
+      <h1 className="text-5xl font-extrabold tracking-tight">Sailing</h1>
       <p className="text-xl text-white/80 max-w-md">
         Программа использует GPS, чтобы запоминать положение знаков стартовой
         линии и верхнего буя. Без доступа к геолокации основные функции работать

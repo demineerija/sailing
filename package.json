@@ -1,9 +1,9 @@
 {
-  "name": "start",
+  "name": "sailing",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Старт — PWA для тренера парусного спорта",
+  "description": "Sailing — PWA для тренера парусного спорта",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

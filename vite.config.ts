@@ -23,8 +23,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon-192.png', 'icon-512.png'],
       manifest: {
-        name: 'Старт',
-        short_name: 'Старт',
+        name: 'Sailing',
+        short_name: 'Sailing',
         description: 'PWA для тренера парусного спорта',
         lang: 'ru',
         dir: 'ltr',
@@ -32,8 +32,8 @@ export default defineConfig({
         background_color: '#0B1A2B',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/',
-        scope: '/',
+        start_url: basePath,
+        scope: basePath,
         icons: [
           {
             src: 'icon-192.png',
